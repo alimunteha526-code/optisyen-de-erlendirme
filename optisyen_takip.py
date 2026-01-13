@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import os
-from io import BytesIO
 
 # --- AYARLAR VE VERİ TABANI ---
 DB_FILE = "optisyen_teknik_veritabanı.csv"
@@ -45,23 +44,7 @@ def turkce_buyuk(metin):
 
 df = veriyi_yukle()
 
-# --- YENİ: MAĞAZA DAĞILIM PENCERESİ ---
-@st.dialog("Mağaza Bazlı Optisyen Dağılımı")
-def magaza_dagilim_penceresi():
-    if not df.empty:
-        # Mağaza bazlı sayım yap
-        dagilim = df.groupby("Mağaza")["Optisyen Adı"].nunique().reset_index()
-        dagilim.columns = ["Mağaza Adı", "Optisyen Sayısı"]
-        dagilim = dagilim.sort_values(by="Optisyen Sayısı", ascending=False)
-        
-        st.table(dagilim)
-        st.write(f"**Toplam Aktif Mağaza Sayısı:** {len(dagilim)}")
-    else:
-        st.warning("Henüz veri girişi yapılmamış.")
-    if st.button("Kapat", use_container_width=True):
-        st.rerun()
-
-# --- SİLME ONAY PENCERESİ ---
+# --- SİLME ONAY DİALOGU ---
 @st.dialog("Kayıt Silinsin mi?")
 def silme_onay_dialogu(index, isim):
     st.warning(f"**{isim}** kaydını silmek istediğinize emin misiniz?")
@@ -74,28 +57,34 @@ def silme_onay_dialogu(index, isim):
     if c2.button("❌ Vazgeç", use_container_width=True):
         st.rerun()
 
-# --- ÜST PANEL ---
+# --- ÜST PANEL VE İSTATİSTİK ---
 st.title("👓 Teknik Takip Sistemi")
 
 if not df.empty:
     toplam_kisi = df["Optisyen Adı"].nunique()
-    col_ist, col_btn = st.columns([4, 1])
-    
-    with col_ist:
-        st.markdown(f"""
-            <div style="background-color:#E8F0FE; padding:15px; border-radius:12px; border-left: 8px solid #1A73E8;">
-                <p style="margin:0; font-size:0.9rem; font-weight:bold; color:#5f6368;">İÇ ANADOLU</p>
-                <h1 style="margin:0; color:#1A73E8; font-size:2.2rem;">Toplam Optisyen Sayısı: {toplam_kisi}</h1>
-            </div>
-        """, unsafe_allow_html=True)
-    
-    with col_btn:
-        st.write("") # Boşluk
-        if st.button("📊 Mağaza Dağılımını Gör", use_container_width=True, type="primary"):
-            magaza_dagilim_penceresi()
+    st.markdown(f"""
+        <div style="background-color:#E8F0FE; padding:15px; border-radius:12px; border-left: 8px solid #1A73E8; margin-bottom: 20px;">
+            <p style="margin:0; font-size:0.9rem; font-weight:bold; color:#5f6368;">İÇ ANADOLU</p>
+            <h1 style="margin:0; color:#1A73E8; font-size:2.2rem;">Toplam Optisyen Sayısı: {toplam_kisi}</h1>
+        </div>
+    """, unsafe_allow_html=True)
 
-# --- DİĞER BÖLÜMLER (KAYIT, LİSTE, YÖNETİM) ---
-# (Kayıt formu ve yönetim sekmeleri önceki sürümle aynı şekilde çalışır)
+    # --- BUTONLU MAĞAZA DAĞILIMI (YENİ) ---
+    if st.button("🏬 Mağaza Bazlı Dağılımı Göster / Gizle"):
+        st.subheader("📍 Mağaza Bazlı Personel Sayıları")
+        dagilim = df.groupby("Mağaza")["Optisyen Adı"].nunique().reset_index()
+        dagilim.columns = ["Mağaza Adı", "Optisyen Sayısı"]
+        dagilim = dagilim.sort_values(by="Optisyen Sayısı", ascending=False)
+        
+        # Grafik ve Tablo Yan Yana
+        col_graf, col_tablo = st.columns([2, 1])
+        with col_graf:
+            st.bar_chart(dagilim.set_index("Mağaza Adı"))
+        with col_tablo:
+            st.table(dagilim)
+        st.divider()
+
+# --- DİĞER BÖLÜMLER ---
 st.sidebar.header("👤 Yeni Kayıt")
 with st.sidebar.form("yeni_personel"):
     isim = st.text_input("Ad Soyad")
@@ -117,11 +106,9 @@ with tab_liste:
 with tab_yonetim:
     if "edit_idx" not in st.session_state: st.session_state.edit_idx = None
     if st.session_state.edit_idx is not None:
-        # Düzenleme Formu...
         idx = st.session_state.edit_idx
         row = df.iloc[idx]
         with st.form("edit_form"):
-            # Anket maddeleri radyoları...
             cevaplar = {}
             c1, c2 = st.columns(2)
             for i, m in enumerate(ANKET_MADDELERİ):
