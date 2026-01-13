@@ -45,16 +45,27 @@ def turkce_buyuk(metin):
 
 df = veriyi_yukle()
 
-# Session State Yönetimi (Düzenleme ve Silme Onayı İçin)
+# --- SİLME ONAY DİALOGU (ORTADA ÇIKAN PENCERE) ---
+@st.dialog("Kayıt Silme Onayı")
+def silme_onay_kutusu(index, isim):
+    st.write(f"⚠️ **{isim}** isimli optisyenin tüm verileri kalıcı olarak silinecektir.")
+    st.write("Bu işlemi onaylıyor musunuz?")
+    col1, col2 = st.columns(2)
+    if col1.button("✅ Evet, Sil", use_container_width=True):
+        global df
+        df = df.drop(index)
+        df.to_csv(DB_FILE, index=False)
+        st.success("Kayıt silindi!")
+        st.rerun()
+    if col2.button("❌ Vazgeç", use_container_width=True):
+        st.rerun()
+
+# --- DÜZENLEME MODU KONTROLÜ ---
 if "active_edit_index" not in st.session_state:
     st.session_state.active_edit_index = None
-if "delete_confirm_index" not in st.session_state:
-    st.session_state.delete_confirm_index = None
 
-# --- BAŞLIK ---
+# --- BAŞLIK VE İSTATİSTİK ---
 st.title("👓 Teknik Takip Sistemi")
-
-# --- İSTATİSTİK PANELİ ---
 if not df.empty:
     toplam_kisi = df["Optisyen Adı"].nunique()
     st.markdown(f"""
@@ -64,7 +75,7 @@ if not df.empty:
         </div>
     """, unsafe_allow_html=True)
 
-# --- SOL PANEL: PERSONEL EKLEME ---
+# --- SOL PANEL: KAYIT ---
 st.sidebar.header("👤 Personel Kaydı")
 with st.sidebar.form("kayit_formu"):
     isim = st.text_input("Ad Soyad")
@@ -79,13 +90,12 @@ with st.sidebar.form("kayit_formu"):
             st.rerun()
 
 # --- ANA SEKMELER ---
-tab_liste, tab_yonetim = st.tabs(["📋 Kayıt Listesi", "⚙️ Kayıt Yönetimi (Düzenle/Sil)"])
+tab_liste, tab_yonetim = st.tabs(["📋 Kayıt Listesi", "⚙️ Kayıt Yönetimi"])
 
 with tab_liste:
     st.dataframe(df[["Tarih", "Optisyen Adı", "Mağaza", "Toplam Puan"]], use_container_width=True)
 
 with tab_yonetim:
-    # 1. DÜZENLEME MODU
     if st.session_state.active_edit_index is not None:
         idx = st.session_state.active_edit_index
         row = df.iloc[idx]
@@ -103,33 +113,15 @@ with tab_yonetim:
                 df.to_csv(DB_FILE, index=False)
                 st.session_state.active_edit_index = None
                 st.rerun()
-        if st.button("Vazgeç"):
+        if st.button("İptal"):
             st.session_state.active_edit_index = None
             st.rerun()
-
-    # 2. LİSTE VE SİLME ONAY MODU
     else:
         for i, r in df.iterrows():
-            col_bilgi, col_aksiyon = st.columns([3, 2])
-            col_bilgi.write(f"**{r['Optisyen Adı']}** — {r['Mağaza']}")
-            
-            # Eğer bu satır için silme onayı bekleniyorsa
-            if st.session_state.delete_confirm_index == i:
-                col_aksiyon.warning("Silinsin mi?")
-                btn_evet, btn_hayir = col_aksiyon.columns(2)
-                if btn_evet.button("Evet, Sil", key=f"confirm_yes_{i}"):
-                    df = df.drop(i)
-                    df.to_csv(DB_FILE, index=False)
-                    st.session_state.delete_confirm_index = None
-                    st.rerun()
-                if btn_hayir.button("İptal", key=f"confirm_no_{i}"):
-                    st.session_state.delete_confirm_index = None
-                    st.rerun()
-            else:
-                c_edit, c_del = col_aksiyon.columns(2)
-                if c_edit.button("✏️ Düzenle", key=f"edit_{i}"):
-                    st.session_state.active_edit_index = i
-                    st.rerun()
-                if c_del.button("🗑️ Sil", key=f"del_{i}"):
-                    st.session_state.delete_confirm_index = i
-                    st.rerun()
+            col_b, col_e, col_d = st.columns([3, 1, 1])
+            col_b.write(f"**{r['Optisyen Adı']}** — {r['Mağaza']}")
+            if col_e.button("✏️ Düzenle", key=f"e_{i}"):
+                st.session_state.active_edit_index = i
+                st.rerun()
+            if col_d.button("🗑️ Sil", key=f"d_{i}"):
+                silme_onay_kutusu(i, r['Optisyen Adı']) # ORTADA ÇIKAN UYARIYI ÇAĞIRIR
