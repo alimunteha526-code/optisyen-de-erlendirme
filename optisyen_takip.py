@@ -15,8 +15,8 @@ MAGAZA_LISTESI = [
 ]
 
 ANKET_MADDELERİ = [
-    "Tek odaklı montaj bilgisi.", "Çok odaklı montaj bilgisi.", "Stellests montaj bilgisi",
-    "Faset montaj bilgisi.", "Kapalı çerçeve Nilör montaj bilgisi.",
+    "Tek odaklı montaj bilgisi", "Çok odaklı montaj bilgisi", "Stellest montaj bilgisi",
+    "Faset montaj bilgisi.", "Kapalı ve Nilör çerçeve montaj bilgisi.",
     "Kanalı öne arkaya alma,polisaj , nilör derinlik ayarlama",
     "Metal çerçeve ayar bakım Kemik çerçeve ayar bakım",
     "Isıtıcı kullanımı, asetat ve enjeksiyon ayırımı", "Nilör çerçeve ayar bakım",
@@ -150,4 +150,5 @@ with tab4:
         ozet.columns = ["Mağaza", "Optisyen Sayısı", "Ort. Puan"]
         st.bar_chart(ozet.set_index("Mağaza")["Ort. Puan"])
         st.table(ozet.style.format({"Ort. Puan": "{:.2f}"}))
+
 
