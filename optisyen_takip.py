@@ -45,8 +45,11 @@ def turkce_buyuk(metin):
 
 df = veriyi_yukle()
 
+# Session State Yönetimi (Düzenleme ve Silme Onayı İçin)
 if "active_edit_index" not in st.session_state:
     st.session_state.active_edit_index = None
+if "delete_confirm_index" not in st.session_state:
+    st.session_state.delete_confirm_index = None
 
 # --- BAŞLIK ---
 st.title("👓 Teknik Takip Sistemi")
@@ -61,13 +64,13 @@ if not df.empty:
         </div>
     """, unsafe_allow_html=True)
 
-# --- SOL PANEL: HIZLI KAYIT ---
-st.sidebar.header("👤 Yeni Personel Ekle")
-with st.sidebar.form("bolge_kayit"):
-    isim = st.text_input("Optisyen Adı Soyadı")
-    magaza = st.selectbox("Mağaza Seçiniz", options=MAGAZA_LISTESI)
-    tarih = st.date_input("Kayıt Tarihi")
-    if st.form_submit_button("Sisteme Dahil Et"):
+# --- SOL PANEL: PERSONEL EKLEME ---
+st.sidebar.header("👤 Personel Kaydı")
+with st.sidebar.form("kayit_formu"):
+    isim = st.text_input("Ad Soyad")
+    magaza = st.selectbox("Mağaza", options=MAGAZA_LISTESI)
+    tarih = st.date_input("Tarih")
+    if st.form_submit_button("Sisteme Ekle"):
         if isim:
             yeni = {"Tarih": str(tarih), "Optisyen Adı": turkce_buyuk(isim), "Mağaza": magaza, "Toplam Puan": 0}
             for m in ANKET_MADDELERİ: yeni[m] = "YAPILMADI"
@@ -76,72 +79,57 @@ with st.sidebar.form("bolge_kayit"):
             st.rerun()
 
 # --- ANA SEKMELER ---
-tab_liste, tab_istatistik, tab_yonetim = st.tabs(["📋 Kayıtlı Optisyenler", "📊 Mağaza Analizleri", "⚙️ Düzenle / Sil / Anket"])
+tab_liste, tab_yonetim = st.tabs(["📋 Kayıt Listesi", "⚙️ Kayıt Yönetimi (Düzenle/Sil)"])
 
 with tab_liste:
-    st.subheader("📋 Güncel Liste")
-    if not df.empty:
-        st.dataframe(df[["Tarih", "Optisyen Adı", "Mağaza", "Toplam Puan"]], use_container_width=True)
-    else:
-        st.info("Henüz kayıt bulunmuyor.")
-
-with tab_istatistik:
-    if not df.empty:
-        st.subheader("📊 Mağaza Dağılımı")
-        magaza_dagilimi = df.groupby("Mağaza")["Optisyen Adı"].nunique()
-        st.bar_chart(magaza_dagilimi)
+    st.dataframe(df[["Tarih", "Optisyen Adı", "Mağaza", "Toplam Puan"]], use_container_width=True)
 
 with tab_yonetim:
-    st.subheader("⚙️ Kayıt Yönetimi")
-    
-    # DÜZENLEME (ANKET) MODU
+    # 1. DÜZENLEME MODU
     if st.session_state.active_edit_index is not None:
         idx = st.session_state.active_edit_index
         row = df.iloc[idx]
-        st.info(f"📝 **{row['Optisyen Adı']}** için teknik anketi dolduruyorsunuz.")
-        
-        with st.form("anket_duzenle"):
-            yeni_cevaplar = {}
+        st.info(f"📝 {row['Optisyen Adı']} Anket Düzenleme")
+        with st.form("duzenle_form"):
+            cevaplar = {}
             c1, c2 = st.columns(2)
-            for i, madde in enumerate(ANKET_MADDELERİ):
-                current_val = row[madde] if madde in row and row[madde] in PUAN_SISTEMI else "YAPILMADI"
+            for i, m in enumerate(ANKET_MADDELERİ):
                 col = c1 if i < 13 else c2
-                yeni_cevaplar[madde] = col.radio(f"{i+1}. {madde}", 
-                                                 options=["İYİ", "ORTA", "ÇOK İYİ", "YAPILMADI"], 
-                                                 index=["İYİ", "ORTA", "ÇOK İYİ", "YAPILMADI"].index(current_val),
-                                                 horizontal=True)
-            
-            if st.form_submit_button("Değişiklikleri Kaydet"):
-                t_puan = sum([PUAN_SISTEMI[v] for v in yeni_cevaplar.values()])
-                for m, v in yeni_cevaplar.items():
-                    df.at[idx, m] = v
-                df.at[idx, "Toplam Puan"] = t_puan
+                cevaplar[m] = col.radio(f"{m}", options=["İYİ", "ORTA", "ÇOK İYİ", "YAPILMADI"], 
+                                        index=["İYİ", "ORTA", "ÇOK İYİ", "YAPILMADI"].index(row[m]), horizontal=True)
+            if st.form_submit_button("Kaydet"):
+                df.at[idx, "Toplam Puan"] = sum([PUAN_SISTEMI[v] for v in cevaplar.values()])
+                for k, v in cevaplar.items(): df.at[idx, k] = v
                 df.to_csv(DB_FILE, index=False)
                 st.session_state.active_edit_index = None
-                st.success("Kayıt güncellendi!")
                 st.rerun()
-        
-        if st.button("Düzenlemeyi İptal Et"):
+        if st.button("Vazgeç"):
             st.session_state.active_edit_index = None
             st.rerun()
-            
-    # LİSTE MODU (SİL VE DÜZENLE BUTONLARI)
+
+    # 2. LİSTE VE SİLME ONAY MODU
     else:
-        if not df.empty:
-            for i, r in df.iterrows():
-                col_metin, col_anket, col_sil = st.columns([3, 1, 1])
-                col_metin.write(f"**{r['Optisyen Adı']}** — {r['Mağaza']} (Puan: {r['Toplam Puan']})")
-                
-                # Düzenle/Anket Butonu
-                if col_anket.button("✏️ Düzenle", key=f"edit_{i}"):
-                    st.session_state.active_edit_index = i
-                    st.rerun()
-                
-                # Sil Butonu
-                if col_sil.button("🗑️ Sil", key=f"del_{i}"):
+        for i, r in df.iterrows():
+            col_bilgi, col_aksiyon = st.columns([3, 2])
+            col_bilgi.write(f"**{r['Optisyen Adı']}** — {r['Mağaza']}")
+            
+            # Eğer bu satır için silme onayı bekleniyorsa
+            if st.session_state.delete_confirm_index == i:
+                col_aksiyon.warning("Silinsin mi?")
+                btn_evet, btn_hayir = col_aksiyon.columns(2)
+                if btn_evet.button("Evet, Sil", key=f"confirm_yes_{i}"):
                     df = df.drop(i)
                     df.to_csv(DB_FILE, index=False)
-                    st.warning(f"{r['Optisyen Adı']} kaydı silindi.")
+                    st.session_state.delete_confirm_index = None
                     st.rerun()
-        else:
-            st.info("İşlem yapılacak kayıt bulunamadı.")
+                if btn_hayir.button("İptal", key=f"confirm_no_{i}"):
+                    st.session_state.delete_confirm_index = None
+                    st.rerun()
+            else:
+                c_edit, c_del = col_aksiyon.columns(2)
+                if c_edit.button("✏️ Düzenle", key=f"edit_{i}"):
+                    st.session_state.active_edit_index = i
+                    st.rerun()
+                if c_del.button("🗑️ Sil", key=f"del_{i}"):
+                    st.session_state.delete_confirm_index = i
+                    st.rerun()
