@@ -69,22 +69,7 @@ if not df.empty:
         </div>
     """, unsafe_allow_html=True)
 
-    # --- BUTONLU MAĞAZA DAĞILIMI (YENİ) ---
-    if st.button("🏬 Mağaza Bazlı Dağılımı Göster / Gizle"):
-        st.subheader("📍 Mağaza Bazlı Personel Sayıları")
-        dagilim = df.groupby("Mağaza")["Optisyen Adı"].nunique().reset_index()
-        dagilim.columns = ["Mağaza Adı", "Optisyen Sayısı"]
-        dagilim = dagilim.sort_values(by="Optisyen Sayısı", ascending=False)
-        
-        # Grafik ve Tablo Yan Yana
-        col_graf, col_tablo = st.columns([2, 1])
-        with col_graf:
-            st.bar_chart(dagilim.set_index("Mağaza Adı"))
-        with col_tablo:
-            st.table(dagilim)
-        st.divider()
-
-# --- DİĞER BÖLÜMLER ---
+# --- SOL PANEL: YENİ KAYIT ---
 st.sidebar.header("👤 Yeni Kayıt")
 with st.sidebar.form("yeni_personel"):
     isim = st.text_input("Ad Soyad")
@@ -98,12 +83,19 @@ with st.sidebar.form("yeni_personel"):
             df.to_csv(DB_FILE, index=False)
             st.rerun()
 
-tab_liste, tab_yonetim = st.tabs(["📋 Kayıt Listesi", "⚙️ Kayıt Yönetimi"])
+# --- ANA SEKMELER (YENİ DÜZEN) ---
+tab_liste, tab_yonetim, tab_dagilim = st.tabs([
+    "📋 Kayıt Listesi", 
+    "⚙️ Kayıt Yönetimi", 
+    "📊 Mağaza Dağılımı"
+])
 
 with tab_liste:
+    st.subheader("📋 Güncel Personel Listesi")
     st.dataframe(df[["Tarih", "Optisyen Adı", "Mağaza", "Toplam Puan"]], use_container_width=True)
 
 with tab_yonetim:
+    st.subheader("⚙️ Düzenleme ve Silme İşlemleri")
     if "edit_idx" not in st.session_state: st.session_state.edit_idx = None
     if st.session_state.edit_idx is not None:
         idx = st.session_state.edit_idx
@@ -131,3 +123,18 @@ with tab_yonetim:
                 st.rerun()
             if col_sl.button("🗑️ Sil", key=f"sl_{i}"):
                 silme_onay_dialogu(i, r['Optisyen Adı'])
+
+with tab_dagilim:
+    st.subheader("📍 Mağaza Bazlı Personel Sayıları")
+    if not df.empty:
+        dagilim = df.groupby("Mağaza")["Optisyen Adı"].nunique().reset_index()
+        dagilim.columns = ["Mağaza Adı", "Optisyen Sayısı"]
+        dagilim = dagilim.sort_values(by="Optisyen Sayısı", ascending=False)
+        
+        col_graf, col_tablo = st.columns([2, 1])
+        with col_graf:
+            st.bar_chart(dagilim.set_index("Mağaza Adı"))
+        with col_tablo:
+            st.table(dagilim)
+    else:
+        st.info("İstatistik gösterilecek veri bulunmuyor.")
