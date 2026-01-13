@@ -6,7 +6,6 @@ from io import BytesIO
 # --- AYARLAR VE VERİ TABANI ---
 DB_FILE = "optisyen_teknik_veritabanı.csv"
 
-# Mağaza Listesi (İç Anadolu Odaklı)
 MAGAZA_LISTESI = [
     "KAYSERİ PARK AVM", "KAYSERİ MEYSU OUTLET AVM", "NOVADA KONYA OUTLET AVM",
     "FORUM KAYSERİ AVM", "NEVŞEHİR NİSSARA AVM", "MARAŞ PİAZZA AVM",
@@ -50,19 +49,19 @@ if "active_edit_index" not in st.session_state:
     st.session_state.active_edit_index = None
 
 # --- BAŞLIK ---
-st.title("👓 İç Anadolu Bölgesi Teknik Takip Sistemi")
+st.title("👓 Teknik Takip Sistemi")
 
-# --- BÖLGESEL İSTATİSTİK PANELİ ---
+# --- GÜNCELLENMİŞ İSTATİSTİK PANELİ ---
 if not df.empty:
     toplam_kisi = df["Optisyen Adı"].nunique()
     st.markdown(f"""
-        <div style="background-color:#E8F0FE; padding:25px; border-radius:15px; border-left: 10px solid #1A73E8; margin-bottom: 25px;">
-            <p style="margin:0; font-size:1.2rem; color:#5f6368;">Bölgesel Durum</p>
-            <h1 style="margin:0; color:#1A73E8; font-size:2.5rem;">İç Anadolu Toplam Optisyen Sayısı: {toplam_kisi}</h1>
+        <div style="background-color:#E8F0FE; padding:20px; border-radius:15px; border-left: 10px solid #1A73E8; margin-bottom: 25px;">
+            <span style="color:#5f6368; font-size:1rem; font-weight:bold;">İÇ ANADOLU</span>
+            <h1 style="margin:0; color:#1A73E8; font-size:2.8rem;">Toplam Optisyen Sayısı: {toplam_kisi}</h1>
         </div>
     """, unsafe_allow_html=True)
 else:
-    st.info("Bölge genelinde henüz kayıtlı personel bulunmamaktadır.")
+    st.info("Henüz kayıtlı personel bulunmamaktadır.")
 
 # --- SOL PANEL: HIZLI KAYIT ---
 st.sidebar.header("👤 Yeni Personel Ekle")
@@ -82,13 +81,12 @@ with st.sidebar.form("bolge_kayit"):
 tab1, tab2, tab3 = st.tabs(["📋 Personel Listesi", "📊 Mağaza Analizleri", "⚙️ Teknik Anketi Doldur"])
 
 with tab1:
-    st.subheader("📋 Bölge Geneli Kayıtlı Optisyenler")
+    st.subheader("📋 Kayıtlı Optisyenler")
     st.dataframe(df[["Tarih", "Optisyen Adı", "Mağaza", "Toplam Puan"]], use_container_width=True)
 
 with tab2:
     if not df.empty:
         st.subheader("📊 Mağaza Dağılım Grafiği")
-        # Mağaza bazlı personel sayısını gösteren grafik
         magaza_dagilimi = df.groupby("Mağaza")["Optisyen Adı"].nunique()
         st.bar_chart(magaza_dagilimi)
         
@@ -96,7 +94,6 @@ with tab2:
         st.table(df.groupby("Mağaza").agg({"Optisyen Adı": "nunique", "Toplam Puan": "mean"}).rename(columns={"Optisyen Adı": "Kişi Sayısı", "Toplam Puan": "Ort. Teknik Puan"}))
 
 with tab3:
-    # (Önceki mesajdaki düzenleme/anket doldurma mantığı burada devam eder)
     if st.session_state.active_edit_index is not None:
         idx = st.session_state.active_edit_index
         row = df.iloc[idx]
@@ -122,5 +119,6 @@ with tab3:
                 st.session_state.active_edit_index = i
                 st.rerun()
             if col3.button("🗑️ Sil", key=f"d{i}"):
-                df.drop(i).to_csv(DB_FILE, index=False)
+                df = df.drop(i)
+                df.to_csv(DB_FILE, index=False)
                 st.rerun()
