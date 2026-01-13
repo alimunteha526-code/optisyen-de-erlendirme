@@ -11,7 +11,7 @@ MAGAZA_LISTESI = [
     "KONYA KENT PLAZA AVM", "M1 KONYA AVM", "KAYSERİ KUMSMALL AVM",
     "PARK KARAMAN AVM", "NİĞDE CADDE", "AKSARAY NORA CITY AVM",
     "KIRŞEHİR CADDE", "KAYSERİ TUNALIFE AVM", "KONYA KAZIMKARABEKİR CADDE",
-    "KONYA ENNTEPE AVM", "SİVAS CADDE", "PRIME MALL"
+    "KONYA ENNTEPE AVM", "SİVAS CADDE", "PRIME MALL","NİĞDE TEMA PARK AVM"
 ]
 
 ANKET_MADDELERİ = [
@@ -140,3 +140,4 @@ with tab4:
         ozet.columns = ["Mağaza", "Optisyen Sayısı", "Ort. Puan"]
         st.bar_chart(ozet.set_index("Mağaza")["Ort. Puan"])
         st.table(ozet.style.format({"Ort. Puan": "{:.2f}"}))
+
