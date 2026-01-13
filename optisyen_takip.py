@@ -37,13 +37,13 @@ def veriyi_yukle():
     cols = ["Tarih", "Optisyen Adı", "Mağaza", "Toplam Puan"] + ANKET_MADDELERİ
     return pd.DataFrame(columns=cols)
 
-st.set_page_config(page_title="Optisyen Teknik Takip", layout="wide")
+st.set_page_config(page_title="Optisyen Teknik Yönetim", layout="wide")
 df = veriyi_yukle()
 
-# --- DİALOGLAR (PENCERELER) ---
+# --- DİALOGLAR ---
 @st.dialog("Kayıt Silinsin mi?")
 def silme_onay_dialogu(index, isim):
-    st.warning(f"⚠️ **{isim}** kaydını silmek üzeresiniz. Bu işlem geri alınamaz!")
+    st.warning(f"⚠️ **{isim}** kaydını silmek üzeresiniz!")
     c1, c2 = st.columns(2)
     if c1.button("✅ Evet, Sil", use_container_width=True):
         global df
@@ -54,85 +54,68 @@ def silme_onay_dialogu(index, isim):
     if c2.button("❌ Vazgeç", use_container_width=True):
         st.rerun()
 
-@st.dialog("Personel Bilgilerini Güncelle")
+@st.dialog("Bilgileri Güncelle")
 def guncelleme_dialogu(index, isim, magaza):
     st.write(f"Düzenlenen: **{isim}**")
     yeni_ad = st.text_input("Yeni Ad Soyad", value=isim).upper().strip()
     yeni_mgz = st.selectbox("Yeni Mağaza", options=MAGAZA_LISTESI, index=MAGAZA_LISTESI.index(magaza) if magaza in MAGAZA_LISTESI else 0)
-    if st.button("💾 Değişiklikleri Kaydet", use_container_width=True):
+    if st.button("💾 Kaydet", use_container_width=True):
         global df
-        df.at[index, "Optisyen Adı"] = yeni_ad
-        df.at[index, "Mağaza"] = yeni_mgz
-        df.to_csv(DB_FILE, index=False, encoding='utf-8-sig')
-        st.success("Güncellendi!")
-        st.rerun()
+        if yeni_ad in df.drop(index)["Optisyen Adı"].values:
+            st.error(f"❌ '{yeni_ad}' ismiyle başka bir kayıt zaten mevcut!")
+        else:
+            df.at[index, "Optisyen Adı"] = yeni_ad
+            df.at[index, "Mağaza"] = yeni_mgz
+            df.to_csv(DB_FILE, index=False, encoding='utf-8-sig')
+            st.success("Güncellendi!")
+            st.rerun()
 
 # --- ANA PANEL ---
-st.title("👓 Optisyen Teknik Takip & Analiz")
+st.title("👓 Optisyen Teknik Takip Sistemi")
 
 # YAN PANEL (SOL)
-st.sidebar.header("📥 Veri İşlemleri")
-with st.sidebar.expander("➕ Tekil Personel Ekle"):
-    with st.form("tekil_ekle"):
-        ad = st.text_input("Ad Soyad").upper().strip()
-        mgz = st.selectbox("Mağaza", options=MAGAZA_LISTESI)
-        if st.form_submit_button("Sisteme Kaydet"):
-            if ad:
-                yeni = {"Tarih": pd.Timestamp.now().strftime("%Y-%m-%d"), "Optisyen Adı": ad, "Mağaza": mgz, "Toplam Puan": 0}
-                for m in ANKET_MADDELERİ: yeni[m] = "YAPILMADI"
-                df = pd.concat([df, pd.DataFrame([yeni])], ignore_index=True)
-                df.to_csv(DB_FILE, index=False, encoding='utf-8-sig')
-                st.rerun()
+st.sidebar.header("📥 Yeni Personel Kaydı")
+with st.sidebar.form("tekil_ekle"):
+    ad = st.text_input("Ad Soyad").upper().strip()
+    mgz = st.selectbox("Mağaza", options=MAGAZA_LISTESI)
+    submit = st.form_submit_button("Sisteme Kaydet")
+    
+    if submit:
+        if not ad:
+            st.error("Lütfen bir isim giriniz!")
+        elif ad in df["Optisyen Adı"].values:
+            st.error(f"⚠️ '{ad}' ismiyle bir kayıt zaten mevcut!")
+        else:
+            yeni = {"Tarih": pd.Timestamp.now().strftime("%Y-%m-%d"), "Optisyen Adı": ad, "Mağaza": mgz, "Toplam Puan": 0}
+            for m in ANKET_MADDELERİ: yeni[m] = "YAPILMADI"
+            df = pd.concat([df, pd.DataFrame([yeni])], ignore_index=True)
+            df.to_csv(DB_FILE, index=False, encoding='utf-8-sig')
+            st.success("Başarıyla eklendi.")
+            st.rerun()
 
-with st.sidebar.expander("📂 Toplu Excel/CSV Yükle"):
-    dosya = st.file_uploader("Dosya Seç", type=["xlsx", "csv"])
-    if dosya:
-        try:
-            if dosya.name.endswith('.csv'):
-                try: ex_df = pd.read_csv(dosya, encoding='utf-8')
-                except: 
-                    dosya.seek(0)
-                    ex_df = pd.read_csv(dosya, encoding='cp1254')
-            else:
-                ex_df = pd.read_excel(dosya, engine='openpyxl')
-            
-            ex_df.columns = [str(c).strip() for c in ex_df.columns]
-            temp_cols = {c: str(c).upper() for c in ex_df.columns}
-            ad_col = next((o for o, c in temp_cols.items() if c in ["OPTİSYEN ADI", "AD SOYAD", "PERSONEL"]), None)
-            mgz_col = next((o for o, c in temp_cols.items() if c in ["MAĞAZA", "ŞUBE", "YER"]), None)
-
-            if ad_col and mgz_col:
-                ex_df = ex_df.rename(columns={ad_col: "Optisyen Adı", mgz_col: "Mağaza"})
-                if st.button("Listeyi Aktar"):
-                    yeni_liste = ex_df[["Optisyen Adı", "Mağaza"]].copy()
-                    yeni_liste["Optisyen Adı"] = yeni_liste["Optisyen Adı"].astype(str).str.upper()
-                    yeni_liste["Tarih"] = pd.Timestamp.now().strftime("%Y-%m-%d")
-                    yeni_liste["Toplam Puan"] = 0
-                    for m in ANKET_MADDELERİ: yeni_liste[m] = "YAPILMADI"
-                    df = pd.concat([df, yeni_liste], ignore_index=True)
-                    df.to_csv(DB_FILE, index=False, encoding='utf-8-sig')
-                    st.rerun()
-        except Exception as e: st.error(f"Hata: {e}")
-
-# SEKMELER (ÜST)
-tab1, tab2, tab3, tab4 = st.tabs(["📋 Kayıt Listesi", "✍️ Teknik Anket", "⚙️ Düzenle/Sil", "📊 Mağaza Analizi"])
+# SEKMELER
+tab1, tab2, tab3, tab4 = st.tabs(["📋 Liste", "✍️ Anket Yap", "⚙️ Düzenle/Sil", "📊 Mağaza Analizi"])
 
 with tab1:
-    st.dataframe(df[["Tarih", "Optisyen Adı", "Mağaza", "Toplam Puan"]], use_container_width=True)
+    if not df.empty:
+        st.dataframe(df[["Tarih", "Optisyen Adı", "Mağaza", "Toplam Puan"]], use_container_width=True)
+    else:
+        st.info("Sistemde henüz kayıtlı personel yok.")
 
 with tab2:
     if not df.empty:
-        secilen = st.selectbox("Personel Seç:", options=sorted(df["Optisyen Adı"].unique()))
+        secilen = st.selectbox("Anket yapılacak personeli seçin:", options=sorted(df["Optisyen Adı"].unique()))
         idx = df[df["Optisyen Adı"] == secilen].index[0]
         row = df.iloc[idx]
         with st.form("anket"):
+            st.markdown(f"### {secilen} Değerlendirmesi")
             cevaplar = {}
             c1, c2 = st.columns(2)
             for i, m in enumerate(ANKET_MADDELERİ):
                 col = c1 if i < 13 else c2
                 cur = row[m] if m in row else "YAPILMADI"
                 cevaplar[m] = col.radio(f"**{m}**", ["İYİ", "ORTA", "ÇOK İYİ", "YAPILMADI"], index=["İYİ", "ORTA", "ÇOK İYİ", "YAPILMADI"].index(cur), horizontal=True)
-            if st.form_submit_button("Puanı Kaydet"):
+            if st.form_submit_button("Anketi Kaydet"):
                 puan = sum([PUAN_SISTEMI[v] for v in cevaplar.values()])
                 df.at[idx, "Toplam Puan"] = puan
                 for k, v in cevaplar.items(): df.at[idx, k] = v
@@ -151,19 +134,9 @@ with tab3:
             silme_onay_dialogu(i, r['Optisyen Adı'])
 
 with tab4:
-    st.subheader("Mağaza Bazlı Teknik Durum")
     if not df.empty:
+        st.subheader("Mağaza Bazlı Performans")
         ozet = df.groupby("Mağaza").agg({"Optisyen Adı": "count", "Toplam Puan": "mean"}).reset_index()
-        ozet.columns = ["Mağaza", "Optisyen Sayısı", "Ort. Teknik Puan"]
-        
-        col_g1, col_g2 = st.columns(2)
-        with col_g1:
-            st.write("**Ortalama Puan Grafiği**")
-            st.bar_chart(ozet.set_index("Mağaza")["Ort. Teknik Puan"])
-        with col_g2:
-            st.write("**Personel Sayısı Grafiği**")
-            st.bar_chart(ozet.set_index("Mağaza")["Optisyen Sayısı"])
-        
-        st.table(ozet.style.format({"Ort. Teknik Puan": "{:.2f}"}))
-    else:
-        st.info("Gösterilecek veri bulunmuyor.")
+        ozet.columns = ["Mağaza", "Optisyen Sayısı", "Ort. Puan"]
+        st.bar_chart(ozet.set_index("Mağaza")["Ort. Puan"])
+        st.table(ozet.style.format({"Ort. Puan": "{:.2f}"}))
