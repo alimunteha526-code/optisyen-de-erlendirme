@@ -18,7 +18,7 @@ MAGAZA_LISTESI = [
 ANKET_MADDELERİ = [
     "Tek odaklı montaj bilgisi.", "Çok odaklı montaj bilgisi.", "Stellests montaj bilgisi",
     "Faset montaj bilgisi.", "Kapalı çerçeve Nilör montaj bilgisi.",
-    "Kanalı öne arkaya alma, polisaj, nilör derinlik ayarlama",
+    "Kanalı öne arkaya alma,polisaj , nilör derinlik ayarlama",
     "Metal çerçeve ayar bakım Kemik çerçeve ayar bakım",
     "Isıtıcı kullanımı, asetat ve enjeksiyon ayırımı", "Nilör çerçeve ayar bakım",
     "Üst ve alt kanal misina takma", "Gövde eğikliği tespit etme", "Faset çerçeve ayar bakım",
@@ -51,7 +51,7 @@ if "active_edit_index" not in st.session_state:
 # --- BAŞLIK ---
 st.title("👓 Teknik Takip Sistemi")
 
-# --- GÜNCELLENMİŞ İSTATİSTİK PANELİ ---
+# --- İSTATİSTİK PANELİ ---
 if not df.empty:
     toplam_kisi = df["Optisyen Adı"].nunique()
     st.markdown(f"""
@@ -60,8 +60,6 @@ if not df.empty:
             <h1 style="margin:0; color:#1A73E8; font-size:2.8rem;">Toplam Optisyen Sayısı: {toplam_kisi}</h1>
         </div>
     """, unsafe_allow_html=True)
-else:
-    st.info("Henüz kayıtlı personel bulunmamaktadır.")
 
 # --- SOL PANEL: HIZLI KAYIT ---
 st.sidebar.header("👤 Yeni Personel Ekle")
@@ -78,47 +76,72 @@ with st.sidebar.form("bolge_kayit"):
             st.rerun()
 
 # --- ANA SEKMELER ---
-tab1, tab2, tab3 = st.tabs(["📋 Personel Listesi", "📊 Mağaza Analizleri", "⚙️ Teknik Anketi Doldur"])
+tab_liste, tab_istatistik, tab_yonetim = st.tabs(["📋 Kayıtlı Optisyenler", "📊 Mağaza Analizleri", "⚙️ Düzenle / Sil / Anket"])
 
-with tab1:
-    st.subheader("📋 Kayıtlı Optisyenler")
-    st.dataframe(df[["Tarih", "Optisyen Adı", "Mağaza", "Toplam Puan"]], use_container_width=True)
-
-with tab2:
+with tab_liste:
+    st.subheader("📋 Güncel Liste")
     if not df.empty:
-        st.subheader("📊 Mağaza Dağılım Grafiği")
+        st.dataframe(df[["Tarih", "Optisyen Adı", "Mağaza", "Toplam Puan"]], use_container_width=True)
+    else:
+        st.info("Henüz kayıt bulunmuyor.")
+
+with tab_istatistik:
+    if not df.empty:
+        st.subheader("📊 Mağaza Dağılımı")
         magaza_dagilimi = df.groupby("Mağaza")["Optisyen Adı"].nunique()
         st.bar_chart(magaza_dagilimi)
-        
-        st.subheader("🏬 Şube Detayları")
-        st.table(df.groupby("Mağaza").agg({"Optisyen Adı": "nunique", "Toplam Puan": "mean"}).rename(columns={"Optisyen Adı": "Kişi Sayısı", "Toplam Puan": "Ort. Teknik Puan"}))
 
-with tab3:
+with tab_yonetim:
+    st.subheader("⚙️ Kayıt Yönetimi")
+    
+    # DÜZENLEME (ANKET) MODU
     if st.session_state.active_edit_index is not None:
         idx = st.session_state.active_edit_index
         row = df.iloc[idx]
-        st.warning(f"📝 {row['Optisyen Adı']} için Teknik Anketi Dolduruyorsunuz")
-        with st.form("anket_f"):
-            yeni_c = {}
-            c_a, c_b = st.columns(2)
-            for i, m in enumerate(ANKET_MADDELERİ):
-                col = c_a if i < 13 else c_b
-                yeni_c[m] = col.radio(f"{i+1}. {m}", options=["İYİ", "ORTA", "ÇOK İYİ", "YAPILMADI"], 
-                                      index=["İYİ", "ORTA", "ÇOK İYİ", "YAPILMADI"].index(row[m]), horizontal=True)
-            if st.form_submit_button("Kaydet"):
-                df.at[idx, "Toplam Puan"] = sum([PUAN_SISTEMI[v] for v in yeni_c.values()])
-                for k, v in yeni_c.items(): df.at[idx, k] = v
+        st.info(f"📝 **{row['Optisyen Adı']}** için teknik anketi dolduruyorsunuz.")
+        
+        with st.form("anket_duzenle"):
+            yeni_cevaplar = {}
+            c1, c2 = st.columns(2)
+            for i, madde in enumerate(ANKET_MADDELERİ):
+                current_val = row[madde] if madde in row and row[madde] in PUAN_SISTEMI else "YAPILMADI"
+                col = c1 if i < 13 else c2
+                yeni_cevaplar[madde] = col.radio(f"{i+1}. {madde}", 
+                                                 options=["İYİ", "ORTA", "ÇOK İYİ", "YAPILMADI"], 
+                                                 index=["İYİ", "ORTA", "ÇOK İYİ", "YAPILMADI"].index(current_val),
+                                                 horizontal=True)
+            
+            if st.form_submit_button("Değişiklikleri Kaydet"):
+                t_puan = sum([PUAN_SISTEMI[v] for v in yeni_cevaplar.values()])
+                for m, v in yeni_cevaplar.items():
+                    df.at[idx, m] = v
+                df.at[idx, "Toplam Puan"] = t_puan
                 df.to_csv(DB_FILE, index=False)
                 st.session_state.active_edit_index = None
+                st.success("Kayıt güncellendi!")
                 st.rerun()
+        
+        if st.button("Düzenlemeyi İptal Et"):
+            st.session_state.active_edit_index = None
+            st.rerun()
+            
+    # LİSTE MODU (SİL VE DÜZENLE BUTONLARI)
     else:
-        for i, r in df.iterrows():
-            col1, col2, col3 = st.columns([3, 1, 1])
-            col1.write(f"**{r['Optisyen Adı']}** - {r['Mağaza']}")
-            if col2.button("✏️ Anketi Yap", key=f"e{i}"):
-                st.session_state.active_edit_index = i
-                st.rerun()
-            if col3.button("🗑️ Sil", key=f"d{i}"):
-                df = df.drop(i)
-                df.to_csv(DB_FILE, index=False)
-                st.rerun()
+        if not df.empty:
+            for i, r in df.iterrows():
+                col_metin, col_anket, col_sil = st.columns([3, 1, 1])
+                col_metin.write(f"**{r['Optisyen Adı']}** — {r['Mağaza']} (Puan: {r['Toplam Puan']})")
+                
+                # Düzenle/Anket Butonu
+                if col_anket.button("✏️ Düzenle", key=f"edit_{i}"):
+                    st.session_state.active_edit_index = i
+                    st.rerun()
+                
+                # Sil Butonu
+                if col_sil.button("🗑️ Sil", key=f"del_{i}"):
+                    df = df.drop(i)
+                    df.to_csv(DB_FILE, index=False)
+                    st.warning(f"{r['Optisyen Adı']} kaydı silindi.")
+                    st.rerun()
+        else:
+            st.info("İşlem yapılacak kayıt bulunamadı.")
