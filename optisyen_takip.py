@@ -5,15 +5,6 @@ import os
 # --- AYARLAR VE VERİ TABANI ---
 DB_FILE = "optisyen_teknik_veritabanı.csv"
 
-MAGAZA_LISTESI = [
-    "KAYSERİ PARK AVM", "KAYSERİ MEYSU OUTLET AVM", "NOVADA KONYA OUTLET AVM",
-    "FORUM KAYSERİ AVM", "NEVŞEHİR NİSSARA AVM", "MARAŞ PİAZZA AVM",
-    "KONYA KENT PLAZA AVM", "M1 KONYA AVM", "KAYSERİ KUMSMALL AVM",
-    "PARK KARAMAN AVM", "NİĞDE CADDE", "AKSARAY NORA CITY AVM",
-    "KIRŞEHİR CADDE", "KAYSERİ TUNALIFE AVM", "KONYA KAZIMKARABEKİR CADDE",
-    "KONYA ENNTEPE AVM", "SİVAS CADDE", "PRIME MALL"
-]
-
 ANKET_MADDELERİ = [
     "Tek odaklı montaj bilgisi.", "Çok odaklı montaj bilgisi.", "Stellests montaj bilgisi",
     "Faset montaj bilgisi.", "Kapalı çerçeve Nilör montaj bilgisi.",
@@ -55,125 +46,134 @@ def silme_onay_dialogu(index, isim):
         st.rerun()
 
 # --- ÜST PANEL ---
-st.title("👓 İç Anadolu Optisyen Teknik Takip")
+st.title("👓 İç Anadolu Optisyen Teknik Takip Sistemi")
 
 if not df.empty:
     toplam_kisi = df["Optisyen Adı"].nunique()
-    st.info(f"📍 Toplam Kayıtlı Optisyen: {toplam_kisi}")
+    st.info(f"📍 Sistemde Kayıtlı Toplam Optisyen: {toplam_kisi}")
 
-# --- YAN PANEL: VERİ YÜKLEME ---
-st.sidebar.header("📥 Veri İşlemleri")
+# --- YAN PANEL: AKILLI DOSYA YÜKLEME ---
+st.sidebar.header("📥 Veri Yükleme")
 
-with st.sidebar.expander("📂 Excel/CSV Dosyası Yükle"):
-    dosya = st.file_uploader("Dosya Seç", type=["xlsx", "csv"])
+with st.sidebar.expander("📂 Excel veya CSV Yükle"):
+    dosya = st.file_uploader("Dosyayı seçin", type=["xlsx", "csv"])
     if dosya:
         try:
+            # Dosya Okuma ve Karakter Kodlaması Çözümü
             if dosya.name.endswith('.csv'):
                 try:
-                    # Önce standart utf-8 dene
                     ex_df = pd.read_csv(dosya, encoding='utf-8')
                 except UnicodeDecodeError:
-                    # Hata verirse Türkçe karakterli Excel CSV formatını (cp1254) dene
                     dosya.seek(0)
                     ex_df = pd.read_csv(dosya, encoding='cp1254')
             else:
-                # Excel okuma (openpyxl gerektirir)
                 ex_df = pd.read_excel(dosya, engine='openpyxl')
             
-            # Sütun isimlerindeki boşlukları temizle
+            # Sütun İsimlerini Temizleme (Boşlukları sil, büyük harfe çevir)
             ex_df.columns = [str(c).strip() for c in ex_df.columns]
+            temp_cols = {c: str(c).upper() for c in ex_df.columns}
             
-            if "Optisyen Adı" in ex_df.columns and "Mağaza" in ex_df.columns:
-                if st.button("Listeyi Sisteme Aktar"):
-                    yeni_veriler = ex_df[["Optisyen Adı", "Mağaza"]].copy()
-                    yeni_veriler["Optisyen Adı"] = yeni_veriler["Optisyen Adı"].str.upper()
-                    yeni_veriler["Tarih"] = pd.Timestamp.now().strftime("%Y-%m-%d")
-                    yeni_veriler["Toplam Puan"] = 0
-                    for m in ANKET_MADDELERİ: yeni_veriler[m] = "YAPILMADI"
+            # Akıllı Eşleştirme (Alternatif başlıkları kontrol et)
+            ad_col = next((o for o, c in temp_cols.items() if c in ["OPTİSYEN ADI", "OPTISYEN ADI", "AD SOYAD", "PERSONEL"]), None)
+            mgz_col = next((o for o, c in temp_cols.items() if c in ["MAĞAZA", "MAGAZA", "ŞUBE", "SUBE", "YER"]), None)
+
+            if ad_col and mgz_col:
+                ex_df = ex_df.rename(columns={ad_col: "Optisyen Adı", mgz_col: "Mağaza"})
+                
+                if st.button("Verileri Sisteme Aktar"):
+                    yeni_liste = ex_df[["Optisyen Adı", "Mağaza"]].copy()
+                    yeni_liste["Optisyen Adı"] = yeni_liste["Optisyen Adı"].astype(str).str.upper()
+                    yeni_liste["Tarih"] = pd.Timestamp.now().strftime("%Y-%m-%d")
+                    yeni_liste["Toplam Puan"] = 0
+                    for m in ANKET_MADDELERİ: yeni_liste[m] = "YAPILMADI"
                     
-                    df = pd.concat([df, yeni_veriler], ignore_index=True)
+                    df = pd.concat([df, yeni_liste], ignore_index=True)
                     df.to_csv(DB_FILE, index=False, encoding='utf-8-sig')
-                    st.success(f"✅ {len(yeni_veriler)} kayıt başarıyla eklendi!")
+                    st.success(f"✅ {len(yeni_liste)} yeni personel başarıyla eklendi!")
                     st.rerun()
             else:
-                st.error("Hata: Dosyada 'Optisyen Adı' ve 'Mağaza' sütunları bulunamadı.")
+                st.error("❌ Sütun başlıkları anlaşılamadı!")
+                st.info(f"Dosyanızdaki başlıklar: {list(ex_df.columns)}")
+                st.warning("Lütfen sütunları 'Optisyen Adı' ve 'Mağaza' olarak adlandırın.")
         except Exception as e:
-            st.error(f"⚠️ Dosya okunurken bir hata oluştu: {e}")
+            st.error(f"⚠️ Dosya hatası: {e}")
 
 # --- ANA SEKMELER ---
-tab1, tab2, tab3, tab4 = st.tabs(["📋 Kayıt Listesi", "✍️ Teknik Anket", "⚙️ Yönetim", "📊 Analiz"])
+tab_liste, tab_anket, tab_yonetim, tab_analiz = st.tabs([
+    "📋 Kayıt Listesi", 
+    "✍️ Teknik Anket Yap", 
+    "⚙️ Personel Yönetimi", 
+    "📊 Mağaza Analizi"
+])
 
-with tab1:
-    st.subheader("📋 Güncel Personel Listesi")
+with tab_liste:
+    st.subheader("📋 Güncel Personel ve Puan Durumu")
     if not df.empty:
         st.dataframe(df[["Tarih", "Optisyen Adı", "Mağaza", "Toplam Puan"]], use_container_width=True)
     else:
-        st.info("Sistemde henüz kayıt bulunmuyor.")
+        st.info("Sistemde henüz kayıtlı personel yok.")
 
-with tab2:
-    st.subheader("✍️ Optisyen Değerlendirme Formu")
+with tab_anket:
+    st.subheader("✍️ Teknik Değerlendirme Formu")
     if not df.empty:
-        secilen_opt = st.selectbox("Değerlendirilecek Optisyen:", options=df["Optisyen Adı"].tolist())
+        # Alfabetik sıralı liste
+        liste_sirali = sorted(df["Optisyen Adı"].unique())
+        secilen_opt = st.selectbox("Anket yapılacak personeli seçin:", options=liste_sirali)
+        
         idx = df[df["Optisyen Adı"] == secilen_opt].index[0]
         row = df.iloc[idx]
         
-        with st.form("anket_formu"):
-            st.write(f"🏢 **Mağaza:** {row['Mağaza']}")
-            cevaplar = {}
+        with st.form("anket_formu_detay"):
+            st.markdown(f"**Mağaza:** {row['Mağaza']} | **Mevcut Puan:** {row['Toplam Puan']}")
+            st.divider()
+            
+            yeni_cevaplar = {}
             col1, col2 = st.columns(2)
             
             for i, madde in enumerate(ANKET_MADDELERİ):
-                secili_col = col1 if i < 13 else col2
-                mevcut_deger = row[madde] if madde in row else "YAPILMADI"
-                cevaplar[madde] = secili_col.radio(
+                hedef_col = col1 if i < 13 else col2
+                mevcut_v = row[madde] if madde in row else "YAPILMADI"
+                yeni_cevaplar[madde] = hedef_col.radio(
                     f"**{i+1}.** {madde}", 
                     ["İYİ", "ORTA", "ÇOK İYİ", "YAPILMADI"], 
-                    index=["İYİ", "ORTA", "ÇOK İYİ", "YAPILMADI"].index(mevcut_deger),
+                    index=["İYİ", "ORTA", "ÇOK İYİ", "YAPILMADI"].index(mevcut_v),
                     horizontal=True,
-                    key=f"radio_{idx}_{i}"
+                    key=f"q_{idx}_{i}"
                 )
             
-            if st.form_submit_button("Anketi Kaydet / Güncelle"):
-                puan = sum([PUAN_SISTEMI[v] for v in cevaplar.values()])
-                df.at[idx, "Toplam Puan"] = puan
-                for k, v in cevaplar.items(): df.at[idx, k] = v
+            if st.form_submit_button("Anketi Kaydet ve Puanı Hesapla"):
+                hesaplanan_puan = sum([PUAN_SISTEMI[v] for v in yeni_cevaplar.values()])
+                df.at[idx, "Toplam Puan"] = hesaplanan_puan
+                for k, v in yeni_cevaplar.items(): df.at[idx, k] = v
+                
                 df.to_csv(DB_FILE, index=False, encoding='utf-8-sig')
-                st.success(f"✅ {secilen_opt} için teknik puan güncellendi: {puan}")
+                st.success(f"✅ Kaydedildi! {secilen_opt} Teknik Puanı: {hesaplanan_puan}")
                 st.rerun()
     else:
-        st.info("Önce personel eklemelisiniz.")
+        st.warning("Anket yapabilmek için önce personel yüklemelisiniz.")
 
-with tab3:
-    st.subheader("⚙️ Personel Bilgilerini Düzenle")
+with tab_yonetim:
+    st.subheader("⚙️ Personel Listesini Düzenle")
     if not df.empty:
         for i, r in df.iterrows():
-            c_ad, c_mgz, c_btn = st.columns([3, 2, 1])
-            c_ad.write(f"**{r['Optisyen Adı']}**")
-            c_mgz.write(f"🏢 {r['Mağaza']}")
-            if c_btn.button("🗑️ Sil", key=f"del_btn_{i}"):
+            c1, c2, c3 = st.columns([3, 2, 1])
+            c1.write(f"**{r['Optisyen Adı']}**")
+            c2.write(f"🏢 {r['Mağaza']}")
+            if c3.button("🗑️ Sil", key=f"del_btn_yonetim_{i}"):
                 silme_onay_dialogu(i, r['Optisyen Adı'])
     else:
-        st.info("Düzenlenecek kayıt bulunamadı.")
+        st.info("Düzenlenecek kayıt yok.")
 
-with tab4:
-    st.subheader("📊 Mağaza Bazlı İstatistikler")
+with tab_analiz:
+    st.subheader("📊 Mağaza Teknik Performans Analizi")
     if not df.empty:
-        # Analiz verisi hazırlama
-        analiz_df = df.groupby("Mağaza").agg({
+        ozet = df.groupby("Mağaza").agg({
             "Optisyen Adı": "count",
             "Toplam Puan": "mean"
         }).reset_index()
-        analiz_df.columns = ["Mağaza", "Optisyen Sayısı", "Teknik Puan Ortalaması"]
+        ozet.columns = ["Mağaza", "Optisyen Sayısı", "Ortalama Teknik Puan"]
         
-        col_g1, col_g2 = st.columns(2)
-        with col_g1:
-            st.write("**Mağaza Teknik Seviyeleri (Ortalama)**")
-            st.bar_chart(analiz_df.set_index("Mağaza")["Teknik Puan Ortalaması"])
-        with col_g2:
-            st.write("**Mağaza Personel Dağılımı**")
-            st.bar_chart(analiz_df.set_index("Mağaza")["Optisyen Sayısı"])
-            
-        st.write("**Detaylı Mağaza Tablosu**")
-        st.table(analiz_df.style.format({"Teknik Puan Ortalaması": "{:.2f}"}))
+        st.bar_chart(ozet.set_index("Mağaza")["Ortalama Teknik Puan"])
+        st.table(ozet.style.format({"Ortalama Teknik Puan": "{:.2f}"}))
     else:
-        st.info("Analiz yapılacak veri bulunmuyor.")
+        st.info("Analiz için veri yetersiz.")
