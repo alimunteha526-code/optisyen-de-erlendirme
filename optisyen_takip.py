@@ -45,43 +45,63 @@ def turkce_buyuk(metin):
 
 df = veriyi_yukle()
 
-# --- SİLME ONAY DİALOGU (ORTADA ÇIKAN PENCERE) ---
-@st.dialog("Kayıt Silme Onayı")
-def silme_onay_kutusu(index, isim):
-    st.write(f"⚠️ **{isim}** isimli optisyenin tüm verileri kalıcı olarak silinecektir.")
-    st.write("Bu işlemi onaylıyor musunuz?")
-    col1, col2 = st.columns(2)
-    if col1.button("✅ Evet, Sil", use_container_width=True):
+# --- YENİ: MAĞAZA DAĞILIM PENCERESİ ---
+@st.dialog("Mağaza Bazlı Optisyen Dağılımı")
+def magaza_dagilim_penceresi():
+    if not df.empty:
+        # Mağaza bazlı sayım yap
+        dagilim = df.groupby("Mağaza")["Optisyen Adı"].nunique().reset_index()
+        dagilim.columns = ["Mağaza Adı", "Optisyen Sayısı"]
+        dagilim = dagilim.sort_values(by="Optisyen Sayısı", ascending=False)
+        
+        st.table(dagilim)
+        st.write(f"**Toplam Aktif Mağaza Sayısı:** {len(dagilim)}")
+    else:
+        st.warning("Henüz veri girişi yapılmamış.")
+    if st.button("Kapat", use_container_width=True):
+        st.rerun()
+
+# --- SİLME ONAY PENCERESİ ---
+@st.dialog("Kayıt Silinsin mi?")
+def silme_onay_dialogu(index, isim):
+    st.warning(f"**{isim}** kaydını silmek istediğinize emin misiniz?")
+    c1, c2 = st.columns(2)
+    if c1.button("✅ Evet, Sil", use_container_width=True):
         global df
-        df = df.drop(index)
+        df = df.drop(index).reset_index(drop=True)
         df.to_csv(DB_FILE, index=False)
-        st.success("Kayıt silindi!")
         st.rerun()
-    if col2.button("❌ Vazgeç", use_container_width=True):
+    if c2.button("❌ Vazgeç", use_container_width=True):
         st.rerun()
 
-# --- DÜZENLEME MODU KONTROLÜ ---
-if "active_edit_index" not in st.session_state:
-    st.session_state.active_edit_index = None
-
-# --- BAŞLIK VE İSTATİSTİK ---
+# --- ÜST PANEL ---
 st.title("👓 Teknik Takip Sistemi")
+
 if not df.empty:
     toplam_kisi = df["Optisyen Adı"].nunique()
-    st.markdown(f"""
-        <div style="background-color:#E8F0FE; padding:20px; border-radius:15px; border-left: 10px solid #1A73E8; margin-bottom: 25px;">
-            <span style="color:#5f6368; font-size:1rem; font-weight:bold;">İÇ ANADOLU</span>
-            <h1 style="margin:0; color:#1A73E8; font-size:2.8rem;">Toplam Optisyen Sayısı: {toplam_kisi}</h1>
-        </div>
-    """, unsafe_allow_html=True)
+    col_ist, col_btn = st.columns([4, 1])
+    
+    with col_ist:
+        st.markdown(f"""
+            <div style="background-color:#E8F0FE; padding:15px; border-radius:12px; border-left: 8px solid #1A73E8;">
+                <p style="margin:0; font-size:0.9rem; font-weight:bold; color:#5f6368;">İÇ ANADOLU</p>
+                <h1 style="margin:0; color:#1A73E8; font-size:2.2rem;">Toplam Optisyen Sayısı: {toplam_kisi}</h1>
+            </div>
+        """, unsafe_allow_html=True)
+    
+    with col_btn:
+        st.write("") # Boşluk
+        if st.button("📊 Mağaza Dağılımını Gör", use_container_width=True, type="primary"):
+            magaza_dagilim_penceresi()
 
-# --- SOL PANEL: KAYIT ---
-st.sidebar.header("👤 Personel Kaydı")
-with st.sidebar.form("kayit_formu"):
+# --- DİĞER BÖLÜMLER (KAYIT, LİSTE, YÖNETİM) ---
+# (Kayıt formu ve yönetim sekmeleri önceki sürümle aynı şekilde çalışır)
+st.sidebar.header("👤 Yeni Kayıt")
+with st.sidebar.form("yeni_personel"):
     isim = st.text_input("Ad Soyad")
     magaza = st.selectbox("Mağaza", options=MAGAZA_LISTESI)
     tarih = st.date_input("Tarih")
-    if st.form_submit_button("Sisteme Ekle"):
+    if st.form_submit_button("Kaydet"):
         if isim:
             yeni = {"Tarih": str(tarih), "Optisyen Adı": turkce_buyuk(isim), "Mağaza": magaza, "Toplam Puan": 0}
             for m in ANKET_MADDELERİ: yeni[m] = "YAPILMADI"
@@ -89,39 +109,38 @@ with st.sidebar.form("kayit_formu"):
             df.to_csv(DB_FILE, index=False)
             st.rerun()
 
-# --- ANA SEKMELER ---
 tab_liste, tab_yonetim = st.tabs(["📋 Kayıt Listesi", "⚙️ Kayıt Yönetimi"])
 
 with tab_liste:
     st.dataframe(df[["Tarih", "Optisyen Adı", "Mağaza", "Toplam Puan"]], use_container_width=True)
 
 with tab_yonetim:
-    if st.session_state.active_edit_index is not None:
-        idx = st.session_state.active_edit_index
+    if "edit_idx" not in st.session_state: st.session_state.edit_idx = None
+    if st.session_state.edit_idx is not None:
+        # Düzenleme Formu...
+        idx = st.session_state.edit_idx
         row = df.iloc[idx]
-        st.info(f"📝 {row['Optisyen Adı']} Anket Düzenleme")
-        with st.form("duzenle_form"):
+        with st.form("edit_form"):
+            # Anket maddeleri radyoları...
             cevaplar = {}
             c1, c2 = st.columns(2)
             for i, m in enumerate(ANKET_MADDELERİ):
                 col = c1 if i < 13 else c2
-                cevaplar[m] = col.radio(f"{m}", options=["İYİ", "ORTA", "ÇOK İYİ", "YAPILMADI"], 
-                                        index=["İYİ", "ORTA", "ÇOK İYİ", "YAPILMADI"].index(row[m]), horizontal=True)
-            if st.form_submit_button("Kaydet"):
+                current = row[m] if m in row else "YAPILMADI"
+                cevaplar[m] = col.radio(m, ["İYİ", "ORTA", "ÇOK İYİ", "YAPILMADI"], index=["İYİ", "ORTA", "ÇOK İYİ", "YAPILMADI"].index(current), horizontal=True)
+            if st.form_submit_button("Güncelle"):
                 df.at[idx, "Toplam Puan"] = sum([PUAN_SISTEMI[v] for v in cevaplar.values()])
                 for k, v in cevaplar.items(): df.at[idx, k] = v
                 df.to_csv(DB_FILE, index=False)
-                st.session_state.active_edit_index = None
+                st.session_state.edit_idx = None
                 st.rerun()
-        if st.button("İptal"):
-            st.session_state.active_edit_index = None
-            st.rerun()
+        if st.button("İptal"): st.session_state.edit_idx = None; st.rerun()
     else:
         for i, r in df.iterrows():
-            col_b, col_e, col_d = st.columns([3, 1, 1])
-            col_b.write(f"**{r['Optisyen Adı']}** — {r['Mağaza']}")
-            if col_e.button("✏️ Düzenle", key=f"e_{i}"):
-                st.session_state.active_edit_index = i
+            col_ad, col_ed, col_sl = st.columns([3, 1, 1])
+            col_ad.write(f"**{r['Optisyen Adı']}** ({r['Mağaza']})")
+            if col_ed.button("✏️ Düzenle", key=f"ed_{i}"):
+                st.session_state.edit_idx = i
                 st.rerun()
-            if col_d.button("🗑️ Sil", key=f"d_{i}"):
-                silme_onay_kutusu(i, r['Optisyen Adı']) # ORTADA ÇIKAN UYARIYI ÇAĞIRIR
+            if col_sl.button("🗑️ Sil", key=f"sl_{i}"):
+                silme_onay_dialogu(i, r['Optisyen Adı'])
