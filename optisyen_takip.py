@@ -21,7 +21,7 @@ ANKET_MADDELERİ = [
     "Metal çerçeve ayar bakım Kemik çerçeve ayar bakım",
     "Isıtıcı kullanımı, asetat ve enjeksiyon ayırımı", "Nilör çerçeve ayar bakım",
     "Üst ve alt kanal misina takma", "Gövde eğikliği tespit etme", "Faset çerçeve ayar bakım",
-    "Pandoskopik, Retroskopik açı verme", "Rayban mineral cam çıkartma",
+    "Pandoskopik, Retroskopik açı verme", "Rayban mineral cam çıkartma bilgisi",
     "Destek ekranı kullanma bilgisi", "Zayi kodları bilgisi", "Eltaşı cam küçültme bilgisi",
     "Nilör makinası kullanım bilgisi", "El matkabı kullanım bilgisi",
     "Makina arızaları izlenecek adım bilgisi", "Makina ve atölye temizliği",
@@ -150,3 +150,4 @@ with tab4:
         ozet.columns = ["Mağaza", "Optisyen Sayısı", "Ort. Puan"]
         st.bar_chart(ozet.set_index("Mağaza")["Ort. Puan"])
         st.table(ozet.style.format({"Ort. Puan": "{:.2f}"}))
+
