@@ -11,7 +11,7 @@ MAGAZA_LISTESI = [
     "KONYA KENT PLAZA AVM", "M1 KONYA AVM", "KAYSERİ KUMSMALL AVM",
     "PARK KARAMAN AVM", "NİĞDE CADDE", "AKSARAY NORA CITY AVM",
     "KIRŞEHİR CADDE", "KAYSERİ TUNALIFE AVM", "KONYA KAZIMKARABEKİR CADDE",
-    "KONYA ENNTEPE AVM", "SİVAS CADDE", "PRIME MALL","NİĞDE TEMA PARK AVM"
+    "KONYA ENNTEPE AVM", "SİVAS CADDE", "PRIME MALL"
 ]
 
 ANKET_MADDELERİ = [
@@ -29,7 +29,9 @@ ANKET_MADDELERİ = [
     "Uygun vida kullanımı", "Plaket takma geçmeli, vidalı"
 ]
 
-PUAN_SISTEMI = {"İYİ": 1, "ORTA": 2, "ÇOK İYİ": 4, "YAPILMADI": 0}
+# Puan Sistemi Güncellendi
+PUAN_SISTEMI = {"YOK": 0, "İYİ": 1, "ORTA": 2, "ÇOK İYİ": 4}
+PUAN_SIRALAMASI = ["YOK", "İYİ", "ORTA", "ÇOK İYİ"]
 
 def veriyi_yukle():
     if os.path.exists(DB_FILE):
@@ -87,7 +89,7 @@ with st.sidebar.form("tekil_ekle"):
             st.error(f"⚠️ '{ad}' ismiyle bir kayıt zaten mevcut!")
         else:
             yeni = {"Tarih": pd.Timestamp.now().strftime("%Y-%m-%d"), "Optisyen Adı": ad, "Mağaza": mgz, "Toplam Puan": 0}
-            for m in ANKET_MADDELERİ: yeni[m] = "YAPILMADI"
+            for m in ANKET_MADDELERİ: yeni[m] = "YOK"
             df = pd.concat([df, pd.DataFrame([yeni])], ignore_index=True)
             df.to_csv(DB_FILE, index=False, encoding='utf-8-sig')
             st.success("Başarıyla eklendi.")
@@ -113,8 +115,16 @@ with tab2:
             c1, c2 = st.columns(2)
             for i, m in enumerate(ANKET_MADDELERİ):
                 col = c1 if i < 13 else c2
-                cur = row[m] if m in row else "YAPILMADI"
-                cevaplar[m] = col.radio(f"**{m}**", ["İYİ", "ORTA", "ÇOK İYİ", "YAPILMADI"], index=["İYİ", "ORTA", "ÇOK İYİ", "YAPILMADI"].index(cur), horizontal=True)
+                # Eski veriler "YAPILMADI" ise "YOK"a çevir veya varsayılan "YOK" yap
+                cur = row[m] if m in row else "YOK"
+                if cur == "YAPILMADI": cur = "YOK"
+                
+                cevaplar[m] = col.radio(
+                    f"**{m}**", 
+                    PUAN_SIRALAMASI, 
+                    index=PUAN_SIRALAMASI.index(cur) if cur in PUAN_SIRALAMASI else 0, 
+                    horizontal=True
+                )
             if st.form_submit_button("Anketi Kaydet"):
                 puan = sum([PUAN_SISTEMI[v] for v in cevaplar.values()])
                 df.at[idx, "Toplam Puan"] = puan
@@ -140,4 +150,3 @@ with tab4:
         ozet.columns = ["Mağaza", "Optisyen Sayısı", "Ort. Puan"]
         st.bar_chart(ozet.set_index("Mağaza")["Ort. Puan"])
         st.table(ozet.style.format({"Ort. Puan": "{:.2f}"}))
-
