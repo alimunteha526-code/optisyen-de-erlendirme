@@ -4,13 +4,14 @@ import matplotlib.pyplot as plt
 import io
 import numpy as np
 
-# Sayfa ayarlarını en basit (minimalist) hale getiriyoruz
-st.set_page_config(page_title="Zayi Raporu", layout="centered")
+# Sayfa Ayarları - Hafif Mod
+st.set_page_config(page_title="Zayi Raporu İşleyici", layout="centered")
 
-st.title("📊 Cam Zayi Raporu - Güvenli İşlem")
+st.title("📊 Cam Zayi Raporu - Güvenli Mod")
 st.markdown("---")
+st.warning("⚠️ Tarayıcı hatasını önlemek için tablo önizlemesi kapatılmıştır. Dosyayı yüklediğinizde doğrudan indirme butonları belirecektir.")
 
-# Görselde paylaştığınız tam mağaza listesi
+# Mağaza Listesi
 istenen_magazalar = [
     "M38003", "M51001", "M42004", "M51002", "M38001", "M38005", 
     "M68001", "M42006", "M42002", "M46001", "M38002", "M42001", 
@@ -21,10 +22,10 @@ uploaded_file = st.file_uploader("Excel dosyasını yükleyin", type=['xlsx'])
 
 if uploaded_file is not None:
     try:
-        # Arka planda veriyi okuma (Ekrana basılmaz)
+        # Arka planda sessizce işle
         df_raw = pd.read_excel(uploaded_file, header=None)
         
-        # Başlık satırı tespiti
+        # Başlık tespiti
         start_row = 0
         for i, row in df_raw.iterrows():
             if "ÜST BIRIM" in str(row.values).upper():
@@ -35,63 +36,57 @@ if uploaded_file is not None:
         df.columns = df.iloc[0]
         df = df[1:].reset_index(drop=True)
         
-        # Sütun temizliği ve Filtreleme
-        df = df.loc[:, df.columns.notna()]
+        # Filtreleme ve Temizlik
         ub_col = next((c for c in df.columns if "ÜST BIRIM" in str(c).upper()), df.columns[0])
         df[ub_col] = df[ub_col].astype(str).str.strip()
-        
         df_final = df[df[ub_col].isin(istenen_magazalar)].copy()
+        
+        # Hata Giderme (#SAYI! / INF temizliği)
         df_final = df_final.replace([np.inf, -np.inf], np.nan).fillna("-")
 
         if df_final.empty:
-            st.error("❌ Dosyada eşleşen mağaza bulunamadı.")
+            st.error("❌ Belirtilen mağaza kodları dosyada bulunamadı.")
         else:
-            st.success(f"✅ {len(df_final)} Mağaza verisi hazırlandı. Lütfen format seçin:")
-
-            # Sadece butonları göster (Tablo önizlemesi yapılmaz)
+            st.success(f"✅ {len(df_final)} Mağaza verisi hazırlandı.")
+            
+            # İndirme Butonları
             col1, col2 = st.columns(2)
             
             with col1:
-                # 📥 EXCEL ÇIKTISI (Lacivert Başlık - Beyaz Yazı)
+                # 📥 EXCEL ÇIKTISI (Lacivert Biçimli)
                 exc_buf = io.BytesIO()
                 with pd.ExcelWriter(exc_buf, engine='xlsxwriter') as writer:
                     df_final.to_excel(writer, index=False, sheet_name='Rapor')
-                    # Orijinal renk kodu: #1F4E78
                     header_fmt = writer.book.add_format({
                         'bold': True, 'bg_color': '#1F4E78', 'font_color': 'white', 'border': 1
                     })
                     for col_num, value in enumerate(df_final.columns.values):
                         writer.sheets['Rapor'].write(0, col_num, value, header_fmt)
-                
-                st.download_button("📥 Excel Olarak İndir", exc_buf.getvalue(), "rapor.xlsx", use_container_width=True)
+                st.download_button("📥 Excel Olarak İndir", exc_buf.getvalue(), "zayi_raporu.xlsx", use_container_width=True)
 
             with col2:
-                # 🖼️ FOTOĞRAF ÇIKTISI (Yüksek DPI)
+                # 🖼️ FOTOĞRAF ÇIKTISI (Orijinal Görünüm)
                 f_width = max(20, len(df_final.columns) * 1.5)
-                f_height = max(8, len(df_final) * 0.7 + 2)
+                f_height = max(8, len(df_final) * 0.8 + 2)
                 fig, ax = plt.subplots(figsize=(f_width, f_height), dpi=100)
                 ax.axis('off')
-
+                
                 tablo = ax.table(
-                    cellText=df_final.values, 
-                    colLabels=df_final.columns,
-                    loc='center', 
-                    cellLoc='center', 
-                    colColours=["#1F4E78"] * len(df_final.columns)
+                    cellText=df_final.values, colLabels=df_final.columns,
+                    loc='center', cellLoc='center', colColours=["#1F4E78"] * len(df_final.columns)
                 )
                 tablo.auto_set_font_size(False)
                 tablo.set_fontsize(10)
                 tablo.scale(1, 4)
-
+                
                 for j in range(len(df_final.columns)):
                     tablo[0, j].get_text().set_color('white')
                     tablo[0, j].get_text().set_weight('bold')
 
                 img_buf = io.BytesIO()
                 plt.savefig(img_buf, format='png', bbox_inches='tight')
-                plt.close(fig) # Hafızayı boşaltmak için şart
-                
-                st.download_button("🖼️ Fotoğraf Olarak İndir", img_buf.getvalue(), "rapor.png", use_container_width=True)
+                plt.close(fig) # Hafızayı temizle
+                st.download_button("🖼️ Fotoğraf Olarak İndir", img_buf.getvalue(), "zayi_raporu.png", use_container_width=True)
 
     except Exception as e:
         st.error(f"Sistem Hatası: {e}")
