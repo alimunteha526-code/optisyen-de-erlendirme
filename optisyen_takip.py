@@ -1,14 +1,13 @@
 import streamlit as st
 import openpyxl
-from openpyxl.utils import get_column_letter
 import io
 
-st.set_page_config(page_title="Zayi Raporu - Birebir Görünüm", layout="centered")
+st.set_page_config(page_title="Zayi Raporu - Temiz Görünüm", layout="centered")
 
-st.title("📊 Cam Zayi Raporu - Görsel Onarıcı")
-st.info("✅ En soldaki bölümler kaldırıldı. Rapor doğrudan 'Üst Birim' ile başlıyor.")
+st.title("📊 Cam Zayi Raporu - Filtre Uygulanmış")
+st.info("✅ Sol taraftaki gruplandırma butonları (+/-) kaldırıldı ve rapor sadeleştirildi.")
 
-# Tam Mağaza Listesi (Filtreleme için)
+# Tam Mağaza Listesi
 istenen_magazalar = [
     "M38003", "M51001", "M42004", "M51002", "M38001", "M38005", 
     "M68001", "M42006", "M42002", "M46001", "M38002", "M42001", 
@@ -19,11 +18,21 @@ uploaded_file = st.file_uploader("Orijinal Excel dosyasını yükleyin", type=['
 
 if uploaded_file is not None:
     try:
-        # 1. Dosyayı tüm biçim özellikleriyle yükle (Formülleri değil biçimi koru)
+        # 1. Dosyayı Biçimleriyle Yükle
         wb = openpyxl.load_workbook(uploaded_file, data_only=False)
         ws = wb.active
 
-        # 2. Üst Birim Sütununu ve Başlık Satırını Dinamik Bul
+        # 2. GRUPLANDIRMALARI KALDIR (Sol taraftaki +/- butonlarını siler)
+        # Satır ve sütunlardaki tüm gruplandırma seviyelerini sıfıra indiriyoruz
+        ws.sheet_format.outlineLevelRow = 0
+        ws.sheet_format.outlineLevelCol = 0
+        
+        # Eğer özel olarak gruplandırılmış satırlar varsa onları tamamen açıyoruz
+        for r in range(1, ws.max_row + 1):
+            ws.row_dimensions[r].outline_level = 0
+            ws.row_dimensions[r].hidden = False
+
+        # 3. Başlık ve "Üst Birim" Sütununu Bul
         header_row = 1
         ub_col_idx = 1
         found = False
@@ -37,49 +46,41 @@ if uploaded_file is not None:
                     break
             if found: break
 
-        # 3. SOLDAKİ BÖLÜMÜ SİL (Üst Birim'in solundaki tüm sütunlar gider)
-        # Eğer Üst Birim 3. sütundaysa (C), 1 ve 2. sütunları (A ve B) siler.
+        # 4. SOLDAKİ GEREKSİZ SÜTUNLARI SİL (Bölge/Müdür kısımları)
         if ub_col_idx > 1:
             ws.delete_cols(1, ub_col_idx - 1)
         
-        # Sütunlar silindiği için artık "Üst Birim" 1. sütun (A sütunu) oldu.
-        new_ub_idx = 1 
-
-        # 4. ÜSTTEKİ BOŞLUKLARI VE GEREKSİZ SATIRLARI SİL
+        # 5. ÜSTTEKİ BOŞ SATIRLARI SİL
         if header_row > 1:
             ws.delete_rows(1, header_row - 1)
-            header_row = 1 # Başlık artık 1. satıra taşındı
+            header_row = 1 
 
-        # 5. MAĞAZALARI FİLTRELE (İstenmeyen satırları temizle)
-        # Sondan başa doğru silmek kaymaları ve biçim bozulmalarını önler
+        # 6. MAĞAZALARI FİLTRELE
         max_row = ws.max_row
+        # Sondan başa doğru silme işlemi
         for r in range(max_row, header_row, -1):
-            m_kodu = str(ws.cell(r, new_ub_idx).value).strip()
+            m_kodu = str(ws.cell(r, 1).value).strip()
             
-            # Eğer hücredeki değer listede yoksa satırı sil
+            # Mağaza kodu listede yoksa satırı sil
             if m_kodu not in istenen_magazalar:
-                # Toplam satırlarını korumak isterseniz ek şart gerekebilir
-                # Şimdilik sadece listede olmayan mağaza satırlarını siliyoruz
+                # Sadece mağaza kodu içeren satırları hedef al (boşlukları veya özetleri değil)
                 if m_kodu != "None" and len(m_kodu) > 2:
                     ws.delete_rows(r)
 
-        # 6. MAVİ ALANI (BAŞLIK) DARALT
-        # Başlık satırının yüksekliğini görsele uygun hale getiriyoruz
-        ws.row_dimensions[1].height = 50 
-        
-        # Üst Birim sütununu (A) biraz genişletelim
-        ws.column_dimensions['A'].width = 12
+        # 7. GÖRSEL DÜZENLEMELER
+        ws.row_dimensions[1].height = 55 # Mavi başlık yüksekliği
+        ws.column_dimensions['A'].width = 15 # Üst Birim genişliği
 
-        # 7. ÇIKTIYI HAZIRLA
+        # 8. ÇIKTIYI HAZIRLA
         output = io.BytesIO()
         wb.save(output)
         
-        st.success(f"✅ İşlem tamamlandı. Rapor doğrudan Üst Birim ile başlıyor.")
+        st.success("✅ İşlem Başarılı! Gruplandırmalar kaldırıldı ve mağazalar filtrelendi.")
         
         st.download_button(
-            label="📥 Onarılmış Raporu İndir",
+            label="📥 Temizlenmiş Raporu İndir",
             data=output.getvalue(),
-            file_name="Zayi_Raporu_Temiz.xlsx",
+            file_name="Zayi_Raporu_Temiz_Gorunum.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
 
