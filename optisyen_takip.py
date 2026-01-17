@@ -1,71 +1,72 @@
 import streamlit as st
 import openpyxl
+from openpyxl.utils import get_column_letter
 import io
 
-st.set_page_config(page_title="Zayi Raporu - Biçim Koruyucu", layout="centered")
+st.set_page_config(page_title="Zayi Raporu - Stil Koruyucu", layout="centered")
 
-st.title("📊 Cam Zayi Raporu - Tam Biçim Korumalı")
-st.info("Bu yöntemle Excel'deki tüm orijinal renkler, çizgiler ve fontlar birebir korunur.")
+st.title("📊 Cam Zayi Raporu - Biçim Onarıcı")
+st.markdown("---")
+st.info("Bu mod, Excel'deki dikey yazıları ve özel renkleri (kırmızı/yeşil) olduğu gibi korur.")
 
-# Mağaza Listesi
+# Görseldeki mağaza kodları
 istenen_magazalar = [
     "M38003", "M51001", "M42004", "M51002", "M38001", "M38005", 
     "M68001", "M42006", "M42002", "M46001", "M38002", "M42001", 
     "M40001", "M42005", "M38004", "M70001", "M50001"
 ]
 
-uploaded_file = st.file_uploader("Orijinal Excel dosyasını yükleyin", type=['xlsx'])
+uploaded_file = st.file_uploader("Bozuk çıkan orijinal Excel'i yükleyin", type=['xlsx'])
 
 if uploaded_file is not None:
     try:
-        # 1. Dosyayı openpyxl ile aç (Biçimleri korumak için en iyi yol)
-        wb = openpyxl.load_workbook(uploaded_file, data_only=False) # Formülleri değil biçimi koru
+        # 1. Dosyayı openpyxl ile (biçimleri koruyarak) yükle
+        wb = openpyxl.load_workbook(uploaded_file, data_only=False)
         ws = wb.active
 
-        # 2. ÜST BİRİM sütununu ve Başlık satırını bul
-        start_row = 1
-        ub_col_idx = 3 # Varsayılan olarak 3. sütun (C)
+        # 2. Başlık ve "Üst Birim" sütununu bul
+        # Görsellerde Üst Birim genellikle C sütununda (3. sütun)
+        target_col_idx = 3 
+        header_row = 1
         
         found = False
-        for row in range(1, 20):
-            for col in range(1, 10):
-                val = str(ws.cell(row, col).value).upper()
-                if "ÜST BIRIM" in val:
-                    start_row = row
-                    ub_col_idx = col
+        for r in range(1, 15):
+            for c in range(1, 10):
+                if "ÜST BIRIM" in str(ws.cell(r, c).value).upper():
+                    header_row = r
+                    target_col_idx = c
                     found = True
                     break
             if found: break
 
         # 3. İLK İKİ SÜTUNU SİL (A ve B sütunlarını siler)
-        # Not: İlk sütunu sildiğimizde diğeri 1. sütun olur, bu yüzden iki kez 1 siliyoruz.
+        # Stil bozulmaması için doğrudan sütun silme komutu kullanılır
         ws.delete_cols(1, 2)
-        ub_col_idx -= 2 # Sütunlar kaydığı için indeksi güncelliyoruz
+        target_col_idx -= 2 # Sütunlar kaydığı için takip indeksini güncelle
 
-        # 4. İSTENMEYEN SATIRLARI SİL
-        # Sondan başa doğru silmek Excel yapısını bozmaz
+        # 4. MAĞAZALARI FİLTRELE (İstenmeyen satırları sil)
+        # Excel'de satır silerken sondan başa gitmek kaymaları önler
         max_row = ws.max_row
-        for r in range(max_row, start_row, -1):
-            cell_val = str(ws.cell(r, ub_col_idx).value).strip()
-            if cell_val not in istenen_magazalar:
-                ws.delete_rows(r)
+        for row_num in range(max_row, header_row, -1):
+            cell_value = str(ws.cell(row_num, target_col_idx).value).strip()
+            
+            # Eğer hücre boşsa veya listede yoksa satırı sil
+            if cell_value not in istenen_magazalar:
+                ws.delete_rows(row_num)
 
-        # 5. BAŞLIK ÜSTÜNDEKİ BOŞLUKLARI SİL (Opsiyonel)
-        if start_row > 1:
-            ws.delete_rows(1, start_row - 1)
-
-        # 6. KAYDETME (Belleğe yazma)
+        # 5. DOSYAYI HAZIRLA
         output = io.BytesIO()
         wb.save(output)
-        
-        st.success("✅ Orijinal biçimler korundu, gereksiz satır ve sütunlar temizlendi.")
+        processed_data = output.getvalue()
+
+        st.success("✅ Dosya başarıyla onarıldı! Renkler ve biçimler korundu.")
         
         st.download_button(
-            label="📥 Orijinal Biçimli Excel'i İndir",
-            data=output.getvalue(),
-            file_name="zayi_raporu_orijinal_stil.xlsx",
+            label="📥 Onarılmış Excel'i İndir",
+            data=processed_data,
+            file_name="Onarilmis_Zayi_Raporu.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
 
     except Exception as e:
-        st.error(f"Sistem Hatası: {e}")
+        st.error(f"İşlem sırasında bir hata oluştu: {e}")
