@@ -1,154 +1,61 @@
-import streamlit as st
 import pandas as pd
-import os
+import matplotlib.pyplot as plt
+import tkinter as tk
+from tkinter import filedialog, messagebox
 
-# --- AYARLAR VE VERİ TABANI ---
-DB_FILE = "optisyen_teknik_veritabanı.csv"
+def excel_to_jpg():
+    # 1. Dosya Seçme Penceresi
+    dosya_yolu = filedialog.askopenfilename(filetypes=[("Excel Files", "*.xlsx *.csv")])
+    if not dosya_yolu:
+        return
 
-MAGAZA_LISTESI = [
-    "KAYSERİ PARK AVM", "KAYSERİ MEYSU OUTLET AVM", "NOVADA KONYA OUTLET AVM",
-    "FORUM KAYSERİ AVM", "NEVŞEHİR NİSSARA AVM", "MARAŞ PİAZZA AVM",
-    "KONYA KENT PLAZA AVM", "M1 KONYA AVM", "KAYSERİ KUMSMALL AVM",
-    "PARK KARAMAN AVM", "NİĞDE CADDE", "AKSARAY NORA CITY AVM",
-    "KIRŞEHİR CADDE", "KAYSERİ TUNALIFE AVM", "KONYA KAZIMKARABEKİR CADDE",
-    "KONYA ENNTEPE AVM", "SİVAS CADDE", "PRIME MALL"
-]
-
-ANKET_MADDELERİ = [
-    "Tek odaklı montaj bilgisi", "Çok odaklı montaj bilgisi", "Stellest montaj bilgisi",
-    "Faset montaj bilgisi.", "Kapalı ve Nilör çerçeve montaj bilgisi.",
-    "Kanalı öne arkaya alma,polisaj , nilör derinlik ayarlama",
-    "Metal çerçeve ayar bakım Kemik çerçeve ayar bakım",
-    "Isıtıcı kullanımı, asetat ve enjeksiyon ayırımı", "Nilör çerçeve ayar bakım",
-    "Üst ve alt kanal misina takma", "Gövde eğikliği tespit etme", "Faset çerçeve ayar bakım",
-    "Pandoskopik, Retroskopik açı verme", "Rayban mineral cam çıkartma bilgisi",
-    "Destek ekranı kullanma bilgisi", "Zayi kodları bilgisi", "Eltaşı cam küçültme bilgisi",
-    "Nilör makinası kullanım bilgisi", "El matkabı kullanım bilgisi",
-    "Makina arızaları izlenecek adım bilgisi", "Makina ve atölye temizliği",
-    "Makina kalibrasyon bilgisi ve tolerans tablosu", "Atölye malzemeleri kullanım alanları",
-    "Uygun vida kullanımı", "Plaket takma geçmeli, vidalı"
-]
-
-# Puan Sistemi Güncellendi
-PUAN_SISTEMI = {"YOK": 0, "İYİ": 1, "ORTA": 2, "ÇOK İYİ": 4}
-PUAN_SIRALAMASI = ["YOK", "İYİ", "ORTA", "ÇOK İYİ"]
-
-def veriyi_yukle():
-    if os.path.exists(DB_FILE):
-        return pd.read_csv(DB_FILE, encoding='utf-8-sig')
-    cols = ["Tarih", "Optisyen Adı", "Mağaza", "Toplam Puan"] + ANKET_MADDELERİ
-    return pd.DataFrame(columns=cols)
-
-st.set_page_config(page_title="Optisyen Teknik Yönetim", layout="wide")
-df = veriyi_yukle()
-
-# --- DİALOGLAR ---
-@st.dialog("Kayıt Silinsin mi?")
-def silme_onay_dialogu(index, isim):
-    st.warning(f"⚠️ **{isim}** kaydını silmek üzeresiniz!")
-    c1, c2 = st.columns(2)
-    if c1.button("✅ Evet, Sil", use_container_width=True):
-        global df
-        df = df.drop(index).reset_index(drop=True)
-        df.to_csv(DB_FILE, index=False, encoding='utf-8-sig')
-        st.success("Kayıt silindi.")
-        st.rerun()
-    if c2.button("❌ Vazgeç", use_container_width=True):
-        st.rerun()
-
-@st.dialog("Bilgileri Güncelle")
-def guncelleme_dialogu(index, isim, magaza):
-    st.write(f"Düzenlenen: **{isim}**")
-    yeni_ad = st.text_input("Yeni Ad Soyad", value=isim).upper().strip()
-    yeni_mgz = st.selectbox("Yeni Mağaza", options=MAGAZA_LISTESI, index=MAGAZA_LISTESI.index(magaza) if magaza in MAGAZA_LISTESI else 0)
-    if st.button("💾 Kaydet", use_container_width=True):
-        global df
-        if yeni_ad in df.drop(index)["Optisyen Adı"].values:
-            st.error(f"❌ '{yeni_ad}' ismiyle başka bir kayıt zaten mevcut!")
+    try:
+        # 2. Veriyi Oku (Excel veya CSV)
+        if dosya_yolu.endswith('.csv'):
+            df = pd.read_csv(dosya_yolu)
         else:
-            df.at[index, "Optisyen Adı"] = yeni_ad
-            df.at[index, "Mağaza"] = yeni_mgz
-            df.to_csv(DB_FILE, index=False, encoding='utf-8-sig')
-            st.success("Güncellendi!")
-            st.rerun()
+            df = pd.read_excel(dosya_yolu)
 
-# --- ANA PANEL ---
-st.title("👓 Optisyen Teknik Takip Sistemi")
+        # 3. Senin istediğin sütunları filtreleyelim (Dosyandaki isimlere göre)
+        # Eğer sütun isimleri farklıysa burayı güncelleyebiliriz
+        secilecek_sutunlar = ['STOK ADI', 'EN', 'BOY', 'ADET', 'TOPLAM m2', 'FİRE NEDENİ']
+        mevcut_sutunlar = [col for col in secilecek_sutunlar if col in df.columns]
+        df_son = df[mevcut_sutunlar].head(20) # İlk 20 satırı alalım (Görselin netliği için)
 
-# YAN PANEL (SOL)
-st.sidebar.header("📥 Yeni Personel Kaydı")
-with st.sidebar.form("tekil_ekle"):
-    ad = st.text_input("Ad Soyad").upper().strip()
-    mgz = st.selectbox("Mağaza", options=MAGAZA_LISTESI)
-    submit = st.form_submit_button("Sisteme Kaydet")
-    
-    if submit:
-        if not ad:
-            st.error("Lütfen bir isim giriniz!")
-        elif ad in df["Optisyen Adı"].values:
-            st.error(f"⚠️ '{ad}' ismiyle bir kayıt zaten mevcut!")
-        else:
-            yeni = {"Tarih": pd.Timestamp.now().strftime("%Y-%m-%d"), "Optisyen Adı": ad, "Mağaza": mgz, "Toplam Puan": 0}
-            for m in ANKET_MADDELERİ: yeni[m] = "YOK"
-            df = pd.concat([df, pd.DataFrame([yeni])], ignore_index=True)
-            df.to_csv(DB_FILE, index=False, encoding='utf-8-sig')
-            st.success("Başarıyla eklendi.")
-            st.rerun()
+        # 4. Tabloyu Görselleştirme
+        fig, ax = plt.subplots(figsize=(12, len(df_son) * 0.6))
+        ax.axis('off')
+        
+        # Renkli ve şık bir tablo tasarımı
+        the_table = ax.table(cellText=df_son.values, colLabels=df_son.columns, 
+                            loc='center', cellLoc='center')
+        
+        the_table.auto_set_font_size(False)
+        the_table.set_fontsize(10)
+        the_table.scale(1.2, 1.8)
 
-# SEKMELER
-tab1, tab2, tab3, tab4 = st.tabs(["📋 Liste", "✍️ Anket Yap", "⚙️ Düzenle/Sil", "📊 Mağaza Analizi"])
+        # Başlık ekle
+        plt.title("Cam Zayi Raporu - Düzenlenmiş Liste", fontsize=14, pad=20)
 
-with tab1:
-    if not df.empty:
-        st.dataframe(df[["Tarih", "Optisyen Adı", "Mağaza", "Toplam Puan"]], use_container_width=True)
-    else:
-        st.info("Sistemde henüz kayıtlı personel yok.")
+        # 5. Kaydetme
+        cikis_yolu = filedialog.asksaveasfilename(defaultextension=".jpg")
+        if cikis_yolu:
+            plt.savefig(cikis_yolu, dpi=300, bbox_inches='tight')
+            messagebox.showinfo("Başarılı", "JPG dosyası oluşturuldu!")
 
-with tab2:
-    if not df.empty:
-        secilen = st.selectbox("Anket yapılacak personeli seçin:", options=sorted(df["Optisyen Adı"].unique()))
-        idx = df[df["Optisyen Adı"] == secilen].index[0]
-        row = df.iloc[idx]
-        with st.form("anket"):
-            st.markdown(f"### {secilen} Değerlendirmesi")
-            cevaplar = {}
-            c1, c2 = st.columns(2)
-            for i, m in enumerate(ANKET_MADDELERİ):
-                col = c1 if i < 13 else c2
-                # Eski veriler "YAPILMADI" ise "YOK"a çevir veya varsayılan "YOK" yap
-                cur = row[m] if m in row else "YOK"
-                if cur == "YAPILMADI": cur = "YOK"
-                
-                cevaplar[m] = col.radio(
-                    f"**{m}**", 
-                    PUAN_SIRALAMASI, 
-                    index=PUAN_SIRALAMASI.index(cur) if cur in PUAN_SIRALAMASI else 0, 
-                    horizontal=True
-                )
-            if st.form_submit_button("Anketi Kaydet"):
-                puan = sum([PUAN_SISTEMI[v] for v in cevaplar.values()])
-                df.at[idx, "Toplam Puan"] = puan
-                for k, v in cevaplar.items(): df.at[idx, k] = v
-                df.to_csv(DB_FILE, index=False, encoding='utf-8-sig')
-                st.success(f"Kaydedildi! Güncel Puan: {puan}")
-                st.rerun()
+    except Exception as e:
+        messagebox.showerror("Hata", f"Bir sorun oluştu: {e}")
 
-with tab3:
-    st.subheader("Personel Listesini Yönet")
-    for i, r in df.iterrows():
-        c_info, c_edit, c_del = st.columns([3, 1, 1])
-        c_info.write(f"**{r['Optisyen Adı']}** ({r['Mağaza']})")
-        if c_edit.button("📝 Değiştir", key=f"edit_{i}"):
-            guncelleme_dialogu(i, r['Optisyen Adı'], r['Mağaza'])
-        if c_del.button("🗑️ Sil", key=f"del_{i}"):
-            silme_onay_dialogu(i, r['Optisyen Adı'])
+# Basit Arayüz Tasarımı
+root = tk.Tk()
+root.title("Cam Zayi - Excel to JPG")
+root.geometry("300x150")
 
-with tab4:
-    if not df.empty:
-        st.subheader("Mağaza Bazlı Performans")
-        ozet = df.groupby("Mağaza").agg({"Optisyen Adı": "count", "Toplam Puan": "mean"}).reset_index()
-        ozet.columns = ["Mağaza", "Optisyen Sayısı", "Ort. Puan"]
-        st.bar_chart(ozet.set_index("Mağaza")["Ort. Puan"])
-        st.table(ozet.style.format({"Ort. Puan": "{:.2f}"}))
+label = tk.Label(root, text="Cam Zayi Raporu Dönüştürücü", pady=10)
+label.pack()
 
+btn = tk.Button(root, text="Excel Seç ve JPG Yap", command=excel_to_jpg, 
+                bg="#4CAF50", fg="white", padx=10, pady=5)
+btn.pack(pady=10)
 
+root.mainloop()
