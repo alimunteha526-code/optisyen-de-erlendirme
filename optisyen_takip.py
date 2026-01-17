@@ -7,9 +7,9 @@ import numpy as np
 # Sayfa Ayarları - Hafif Mod
 st.set_page_config(page_title="Zayi Raporu İşleyici", layout="centered")
 
-st.title("📊 Cam Zayi Raporu - Güvenli Mod")
+st.title("📊 Cam Zayi Raporu - Düzenlenmiş Versiyon")
 st.markdown("---")
-st.warning("⚠️ Tarayıcı hatasını önlemek için tablo önizlemesi kapatılmıştır. Dosyayı yüklediğinizde doğrudan indirme butonları belirecektir.")
+st.info("ℹ️ İlk iki sütun kaldırıldı. Doğrudan 'Üst Birim'den başlayan raporu indirebilirsiniz.")
 
 # Mağaza Listesi
 istenen_magazalar = [
@@ -36,6 +36,11 @@ if uploaded_file is not None:
         df.columns = df.iloc[0]
         df = df[1:].reset_index(drop=True)
         
+        # --- İLK İKİ SÜTUNU SİLME ---
+        # 0 ve 1. indexteki sütunları kaldırıyoruz
+        df = df.iloc[:, 2:] 
+        # ----------------------------
+        
         # Filtreleme ve Temizlik
         ub_col = next((c for c in df.columns if "ÜST BIRIM" in str(c).upper()), df.columns[0])
         df[ub_col] = df[ub_col].astype(str).str.strip()
@@ -47,7 +52,7 @@ if uploaded_file is not None:
         if df_final.empty:
             st.error("❌ Belirtilen mağaza kodları dosyada bulunamadı.")
         else:
-            st.success(f"✅ {len(df_final)} Mağaza verisi hazırlandı.")
+            st.success(f"✅ {len(df_final)} Mağaza verisi hazırlandı (İlk 2 sütun hariç).")
             
             # İndirme Butonları
             col1, col2 = st.columns(2)
@@ -62,11 +67,11 @@ if uploaded_file is not None:
                     })
                     for col_num, value in enumerate(df_final.columns.values):
                         writer.sheets['Rapor'].write(0, col_num, value, header_fmt)
-                st.download_button("📥 Excel Olarak İndir", exc_buf.getvalue(), "zayi_raporu.xlsx", use_container_width=True)
+                st.download_button("📥 Excel Olarak İndir", exc_buf.getvalue(), "zayi_raporu_yeni.xlsx", use_container_width=True)
 
             with col2:
                 # 🖼️ FOTOĞRAF ÇIKTISI (Orijinal Görünüm)
-                f_width = max(20, len(df_final.columns) * 1.5)
+                f_width = max(18, len(df_final.columns) * 1.5)
                 f_height = max(8, len(df_final) * 0.8 + 2)
                 fig, ax = plt.subplots(figsize=(f_width, f_height), dpi=100)
                 ax.axis('off')
@@ -85,8 +90,8 @@ if uploaded_file is not None:
 
                 img_buf = io.BytesIO()
                 plt.savefig(img_buf, format='png', bbox_inches='tight')
-                plt.close(fig) # Hafızayı temizle
-                st.download_button("🖼️ Fotoğraf Olarak İndir", img_buf.getvalue(), "zayi_raporu.png", use_container_width=True)
+                plt.close(fig) 
+                st.download_button("🖼️ Fotoğraf Olarak İndir", img_buf.getvalue(), "zayi_raporu_yeni.png", use_container_width=True)
 
     except Exception as e:
         st.error(f"Sistem Hatası: {e}")
