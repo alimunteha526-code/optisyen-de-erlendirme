@@ -15,7 +15,8 @@ st.info("✅ İlk iki sütun kaldırıldı ve sayısal hatalar temizlendi.")
 istenen_magazalar = [
     "M38003", "M51001", "M42004", "M51002", "M38001", "M38005", 
     "M68001", "M42006", "M42002", "M46001", "M38002", "M42001", 
-    "M40001", "M42005", "M38004", "M70001", "M50001"
+    "M40001", "M42005", "M38004", "M70001", "M50001","IC ANADOLU"		
+
 ]
 
 uploaded_file = st.file_uploader("Excel dosyasını yükleyin", type=['xlsx'])
@@ -97,3 +98,4 @@ if uploaded_file is not None:
 
     except Exception as e:
         st.error(f"Sistem Hatası: {e}")
+
