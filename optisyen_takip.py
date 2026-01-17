@@ -5,10 +5,10 @@ import io
 
 st.set_page_config(page_title="Zayi Raporu - Birebir Görünüm", layout="centered")
 
-st.title("📊 Cam Zayi Raporu - Orijinal Biçim Koruyucu")
-st.info("Bu sürüm; renkleri, sütun genişliklerini ve dikey yazıları orijinal dosyanızdan kopyalar.")
+st.title("📊 Cam Zayi Raporu - Görsel Onarıcı")
+st.info("✅ En soldaki bölümler kaldırıldı. Rapor doğrudan 'Üst Birim' ile başlıyor.")
 
-# Tam Mağaza Listesi
+# Tam Mağaza Listesi (Filtreleme için)
 istenen_magazalar = [
     "M38003", "M51001", "M42004", "M51002", "M38001", "M38005", 
     "M68001", "M42006", "M42002", "M46001", "M38002", "M42001", 
@@ -19,13 +19,13 @@ uploaded_file = st.file_uploader("Orijinal Excel dosyasını yükleyin", type=['
 
 if uploaded_file is not None:
     try:
-        # 1. Dosyayı tüm biçim özellikleriyle yükle
+        # 1. Dosyayı tüm biçim özellikleriyle yükle (Formülleri değil biçimi koru)
         wb = openpyxl.load_workbook(uploaded_file, data_only=False)
         ws = wb.active
 
-        # 2. Üst Birim ve Başlık Satırını Bul
+        # 2. Üst Birim Sütununu ve Başlık Satırını Dinamik Bul
         header_row = 1
-        ub_col_idx = 3 # Genelde C sütunu
+        ub_col_idx = 1
         found = False
         for r in range(1, 20):
             for c in range(1, 10):
@@ -37,45 +37,51 @@ if uploaded_file is not None:
                     break
             if found: break
 
-        # 3. İLK İKİ SÜTUNU SİL (Bölge ve Müdür)
-        # Biçimlerin kaymaması için doğrudan sütun silme
-        ws.delete_cols(1, 2)
-        ub_col_idx -= 2
+        # 3. SOLDAKİ BÖLÜMÜ SİL (Üst Birim'in solundaki tüm sütunlar gider)
+        # Eğer Üst Birim 3. sütundaysa (C), 1 ve 2. sütunları (A ve B) siler.
+        if ub_col_idx > 1:
+            ws.delete_cols(1, ub_col_idx - 1)
+        
+        # Sütunlar silindiği için artık "Üst Birim" 1. sütun (A sütunu) oldu.
+        new_ub_idx = 1 
 
-        # 4. MAĞAZALARI FİLTRELE (Görseli bozmadan satır silme)
-        # Sondan başa doğru silmek Excel yapısını (merge cells dahil) korur
-        max_row = ws.max_row
-        for r in range(max_row, header_row, -1):
-            m_kodu = str(ws.cell(r, ub_col_idx).value).strip()
-            # Eğer satır listede yoksa ve başlık satırı değilse sil
-            if m_kodu not in istenen_magazalar and r != header_row:
-                # Toplam satırlarını (Genel Toplam vb.) korumak istersen buraya şart eklenebilir
-                if m_kodu != "None" and len(m_kodu) > 2: 
-                    ws.delete_rows(r)
-
-        # 5. ÜSTTEKİ BOŞLUKLARI TEMİZLE
+        # 4. ÜSTTEKİ BOŞLUKLARI VE GEREKSİZ SATIRLARI SİL
         if header_row > 1:
             ws.delete_rows(1, header_row - 1)
+            header_row = 1 # Başlık artık 1. satıra taşındı
 
-        # 6. MAVİ ALANI (BAŞLIK) KÜÇÜLT VE DÜZENLE
-        # Satır yüksekliğini daraltıyoruz (Görseldeki gibi daha şık durması için)
-        ws.row_dimensions[1].height = 55 
+        # 5. MAĞAZALARI FİLTRELE (İstenmeyen satırları temizle)
+        # Sondan başa doğru silmek kaymaları ve biçim bozulmalarını önler
+        max_row = ws.max_row
+        for r in range(max_row, header_row, -1):
+            m_kodu = str(ws.cell(r, new_ub_idx).value).strip()
+            
+            # Eğer hücredeki değer listede yoksa satırı sil
+            if m_kodu not in istenen_magazalar:
+                # Toplam satırlarını korumak isterseniz ek şart gerekebilir
+                # Şimdilik sadece listede olmayan mağaza satırlarını siliyoruz
+                if m_kodu != "None" and len(m_kodu) > 2:
+                    ws.delete_rows(r)
+
+        # 6. MAVİ ALANI (BAŞLIK) DARALT
+        # Başlık satırının yüksekliğini görsele uygun hale getiriyoruz
+        ws.row_dimensions[1].height = 50 
         
-        # Sütun genişliklerini orijinaline yakın sabitleyelim (Opsiyonel)
-        ws.column_dimensions[get_column_letter(ub_col_idx)].width = 15
+        # Üst Birim sütununu (A) biraz genişletelim
+        ws.column_dimensions['A'].width = 12
 
-        # 7. ÇIKTI
+        # 7. ÇIKTIYI HAZIRLA
         output = io.BytesIO()
         wb.save(output)
         
-        st.success("✅ Tüm renkler ve sütun aralıkları korundu. Dosya hazır.")
+        st.success(f"✅ İşlem tamamlandı. Rapor doğrudan Üst Birim ile başlıyor.")
         
         st.download_button(
-            label="📥 Birebir Görünümlü Excel'i İndir",
+            label="📥 Onarılmış Raporu İndir",
             data=output.getvalue(),
-            file_name="Zayi_Raporu_Birebir.xlsx",
+            file_name="Zayi_Raporu_Temiz.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
 
     except Exception as e:
-        st.error(f"Hata: {e}")
+        st.error(f"Bir hata oluştu: {e}")
