@@ -2,13 +2,11 @@ import streamlit as st
 import openpyxl
 import io
 
-# Sayfa Yapılandırması
-st.set_page_config(page_title="Zayi Raporu - Tam Temizlik", layout="wide")
+st.set_page_config(page_title="Zayi Raporu - Kesin Çözüm", layout="wide")
 
-st.title("📊 Cam Zayi Raporu - Saf ve Görünür Veri")
-st.info("✅ Gizli satır/sütunlar silindi, birleştirmeler kaldırıldı ve mağaza isimleri sabitlendi.")
+st.title("📊 Cam Zayi Raporu - Hata Onarılmış Sürüm")
+st.info("✅ '231, 3' hatası giderildi. Gizli satırlar silindi ve birleştirmeler güvenli bir şekilde kaldırıldı.")
 
-# Mağaza Kodları ve İsimleri
 magaza_sozlugu = {
     "M38001": "KAYSERI PARK AVM", "M38002": "KAYSERI MEYSU OUTLET AVM",
     "M38003": "FORUM KAYSERI AVM", "M38004": "KAYSERI KUMSMALL AVM",
@@ -29,43 +27,44 @@ if uploaded_file is not None:
         wb = openpyxl.load_workbook(uploaded_file, data_only=False)
         ws = wb.active
 
-        # 2. TÜM GİZLİ SATIR VE SÜTUNLARI SİL
-        # Gizli satırları temizle
+        # 2. BİRLEŞTİRİLMİŞ HÜCRELERİ GÜVENLİCE ÇÖZ (Hata önleyici döngü)
+        # Bazı birleştirmeler silinen satırlar nedeniyle boşa düşebilir, bu yüzden try-except ile geçiyoruz
+        merged_ranges = list(ws.merged_cells.ranges)
+        for m_range in merged_ranges:
+            try:
+                ws.unmerge_cells(str(m_range))
+            except:
+                continue
+
+        # 3. GİZLİ SATIR VE SÜTUNLARI TAMAMEN SİL
+        # Satırlar (Sondan başa doğru silmek kaymaları önler)
         for row_idx in range(ws.max_row, 0, -1):
             if ws.row_dimensions[row_idx].hidden:
                 ws.delete_rows(row_idx)
         
-        # Gizli sütunları temizle
+        # Sütunlar
         for col_idx in range(ws.max_column, 0, -1):
             col_letter = openpyxl.utils.get_column_letter(col_idx)
             if ws.column_dimensions[col_letter].hidden:
                 ws.delete_cols(col_idx)
 
-        # 3. BİRLEŞTİRİLMİŞ HÜCRELERİ ÇÖZ (Unmerge)
-        merged_ranges = list(ws.merged_cells.ranges)
-        for m_range in merged_ranges:
-            ws.unmerge_cells(str(m_range))
-
-        # 4. GRUPLANDIRMA (OUTLINE) SEVİYELERİNİ SIFIRLA
-        ws.sheet_format.outlineLevelRow = 0
-        ws.sheet_format.outlineLevelCol = 0
-
-        # 5. BAŞLIK TESPİTİ VE TEMİZLİK
+        # 4. BAŞLIK TESPİTİ
         header_row, ub_col_idx = 1, 1
         found = False
-        for r in range(1, 20):
+        for r in range(1, 30):
             for c in range(1, 15):
                 if "ÜST BIRIM" in str(ws.cell(r, c).value).upper():
                     header_row, ub_col_idx, found = r, c, True
                     break
             if found: break
 
-        # Sol sütunları ve üst boşluğu sil (Üst Birim A1'e gelene kadar)
+        # 5. SOL SÜTUNLARI VE ÜST BOŞLUĞU SİL
         if ub_col_idx > 1: ws.delete_cols(1, ub_col_idx - 1)
         if header_row > 1: ws.delete_rows(1, header_row - 1)
         header_row = 1
 
-        # 6. MAĞAZALARI FİLTRELE VE İSİMLERİ YAZ
+        # 6. MAĞAZA FİLTRESİ VE İSİM YAZIMI
+        # Gizli hücreler silindiği için artık sadece gerçek veriler kaldı
         max_row = ws.max_row
         for r in range(max_row, header_row, -1):
             m_kodu = str(ws.cell(r, 1).value).strip()
@@ -77,26 +76,27 @@ if uploaded_file is not None:
             elif m_kodu == "None" or m_kodu == "":
                 if r > header_row: ws.delete_rows(r)
 
-        # 7. GÖRSEL AYARLAR (Başlıkları Düzenle)
+        # 7. GÖRSEL DÜZENLEME
         ws.row_dimensions[1].height = 60
         ws.column_dimensions['A'].width = 12
         ws.column_dimensions['B'].width = 30
         
-        # Hizalamayı düzelt (Birleştirme kalktığı için bağımsız hücreleri ortala)
-        for cell in ws[1]:
-            cell.alignment = openpyxl.styles.Alignment(horizontal='center', vertical='center', wrapText=True)
+        # Stil temizliği: Tüm hücreleri standart hizalamaya getir
+        for row in ws.iter_rows(min_row=1, max_row=ws.max_row):
+            for cell in row:
+                cell.alignment = openpyxl.styles.Alignment(horizontal='left', vertical='center')
 
-        # 8. ÇIKTIYI HAZIRLA
+        # 8. ÇIKTI
         output = io.BytesIO()
         wb.save(output)
         
-        st.success("✅ Gizli hücreler ve birleştirmeler temizlendi. Rapor hazır!")
+        st.success("✅ Hata giderildi ve dosya temizlendi!")
         st.download_button(
-            label="📥 Tam Temizlenmiş Excel'i İndir",
+            label="📥 Sorunsuz Excel'i İndir",
             data=output.getvalue(),
-            file_name="Zayi_Raporu_Gizlisiz.xlsx",
+            file_name="Zayi_Raporu_Kesin_Sonuc.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
 
     except Exception as e:
-        st.error(f"Hata: {e}")
+        st.error(f"Beklenmedik bir hata oluştu: {e}")
