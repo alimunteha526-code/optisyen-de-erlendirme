@@ -2,10 +2,10 @@ import streamlit as st
 import openpyxl
 import io
 
-st.set_page_config(page_title="Zayi Raporu - Temiz Görünüm", layout="centered")
+st.set_page_config(page_title="Zayi Raporu - Final Düzenleme", layout="centered")
 
-st.title("📊 Cam Zayi Raporu - Filtre Uygulanmış")
-st.info("✅ Sol taraftaki gruplandırma butonları (+/-) kaldırıldı ve rapor sadeleştirildi.")
+st.title("📊 Cam Zayi Raporu - Görsel Onarıcı")
+st.info("✅ Sol taraftaki gruplandırma çubukları (+/-) tamamen temizlendi.")
 
 # Tam Mağaza Listesi
 istenen_magazalar = [
@@ -18,21 +18,19 @@ uploaded_file = st.file_uploader("Orijinal Excel dosyasını yükleyin", type=['
 
 if uploaded_file is not None:
     try:
-        # 1. Dosyayı Biçimleriyle Yükle
+        # 1. Dosyayı Biçimleriyle Birlikte Yükle
         wb = openpyxl.load_workbook(uploaded_file, data_only=False)
         ws = wb.active
 
-        # 2. GRUPLANDIRMALARI KALDIR (Sol taraftaki +/- butonlarını siler)
-        # Satır ve sütunlardaki tüm gruplandırma seviyelerini sıfıra indiriyoruz
+        # 2. SOLDAKİ GRUPLANDIRMA (OUTLINE) YAPISINI SIFIRLA
+        # Bu kısım o istemediğiniz +/- butonlarını ve sol çizgileri yok eder
         ws.sheet_format.outlineLevelRow = 0
         ws.sheet_format.outlineLevelCol = 0
-        
-        # Eğer özel olarak gruplandırılmış satırlar varsa onları tamamen açıyoruz
         for r in range(1, ws.max_row + 1):
             ws.row_dimensions[r].outline_level = 0
-            ws.row_dimensions[r].hidden = False
+            ws.row_dimensions[r].hidden = False # Gizli satır varsa açar
 
-        # 3. Başlık ve "Üst Birim" Sütununu Bul
+        # 3. Başlık ve "Üst Birim" Sütununu Tespit Et
         header_row = 1
         ub_col_idx = 1
         found = False
@@ -55,34 +53,35 @@ if uploaded_file is not None:
             ws.delete_rows(1, header_row - 1)
             header_row = 1 
 
-        # 6. MAĞAZALARI FİLTRELE
+        # 6. MAĞAZALARI FİLTRELE (İstenmeyenleri Budama)
         max_row = ws.max_row
-        # Sondan başa doğru silme işlemi
+        # Sondan başa doğru silmek Excel yapısını (merge cells dahil) korur
         for r in range(max_row, header_row, -1):
             m_kodu = str(ws.cell(r, 1).value).strip()
             
-            # Mağaza kodu listede yoksa satırı sil
+            # Eğer hücredeki mağaza kodu listede yoksa satırı sil
             if m_kodu not in istenen_magazalar:
-                # Sadece mağaza kodu içeren satırları hedef al (boşlukları veya özetleri değil)
+                # Toplam satırlarını korumak isterseniz ek şart gerekebilir.
+                # Şimdilik sadece mağaza kodu içeren ama listede olmayanları siliyoruz.
                 if m_kodu != "None" and len(m_kodu) > 2:
                     ws.delete_rows(r)
 
-        # 7. GÖRSEL DÜZENLEMELER
-        ws.row_dimensions[1].height = 55 # Mavi başlık yüksekliği
-        ws.column_dimensions['A'].width = 15 # Üst Birim genişliği
+        # 7. GÖRSEL AYARLAR (Mavi Başlığı Daraltma)
+        ws.row_dimensions[1].height = 55 # Başlık yüksekliğini görsele uydurur
+        ws.column_dimensions['A'].width = 15 # Üst Birim sütun genişliği
 
         # 8. ÇIKTIYI HAZIRLA
         output = io.BytesIO()
         wb.save(output)
         
-        st.success("✅ İşlem Başarılı! Gruplandırmalar kaldırıldı ve mağazalar filtrelendi.")
+        st.success("✅ Rapor Hazır! Renkler korundu ve gruplandırmalar kaldırıldı.")
         
         st.download_button(
-            label="📥 Temizlenmiş Raporu İndir",
+            label="📥 Onarılmış Excel'i İndir",
             data=output.getvalue(),
-            file_name="Zayi_Raporu_Temiz_Gorunum.xlsx",
+            file_name="Zayi_Raporu_Temiz.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
 
     except Exception as e:
-        st.error(f"Bir hata oluştu: {e}")
+        st.error(f"Sistem Hatası: {e}")
