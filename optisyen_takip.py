@@ -3,55 +3,56 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import io
 
-st.set_page_config(page_title="Zayi Raporu", layout="wide")
-st.title("📊 Cam Zayi Raporu Görselleştirici")
+st.set_page_config(page_title="Özel Mağaza Raporu", layout="wide")
+st.title("📊 Mağaza Koduna Göre Filtrelenmiş Rapor")
+
+# --- BURAYI DÜZENLEYİN ---
+# Sadece bu listedeki mağaza kodları (Üst Birim) görünecek
+# Örnek: [101, 102, 205] gibi kodları buraya ekleyin
+filtre_kodlar = [101, 102] 
+# --------------------------
 
 uploaded_file = st.file_uploader("Excel dosyasını yükleyin", type=['xlsx'])
 
 if uploaded_file is not None:
     try:
-        # 1. Dosyayı ham (başlıksız) oku
+        # 1. Dosyayı ham oku ve gerçek başlığı bul
         df_raw = pd.read_excel(uploaded_file, header=None)
-
-        # 2. Gerçek başlık satırını bul (BÖLGE veya ÜST BIRIM kelimesini ara)
+        
         target_row_index = None
         for i, row in df_raw.iterrows():
-            # Satırdaki tüm hücreleri metne çevir ve büyük harf yapıp birleştir
             row_content = " ".join([str(val).upper() for val in row.values])
-            if "BÖLGE" in row_content or "ÜST BIRIM" in row_content or "NET SATIŞ" in row_content:
+            if "ÜST BIRIM" in row_content or "BÖLGE" in row_content:
                 target_row_index = i
                 break
 
-        if target_row_index is None:
-            st.error("Dosya içinde 'BÖLGE' veya 'ÜST BIRIM' sütunu bulunamadı. Lütfen doğru dosyayı yüklediğinizden emin olun.")
-            st.write("Dosyanın ilk 5 satırı şöyle görünüyor:", df_raw.head(5))
-        else:
-            # 3. Tabloyu yeniden yapılandır
+        if target_row_index is not None:
+            # 2. Tabloyu yapılandır (Excel'deki orijinal sütun isimlerini koru)
             df = df_raw.iloc[target_row_index:].copy()
-            df.columns = df.iloc[0] # Bulduğumuz satırı başlık yap
-            df = df[1:].reset_index(drop=True) # Başlık satırını veriden çıkar
+            df.columns = df.iloc[0] 
+            df = df[1:].reset_index(drop=True)
             
-            # Sütun isimlerini temizle
-            df.columns = df.columns.astype(str).str.strip().str.upper()
-
-            # 4. İstenen sütunları eşleştir
-            hedef_sutunlar = [
-                'BÖLGE', 'ÜST BIRIM', 'NET SATIŞ MIKTARI (CAM)', 
-                'TOPLAM CAM ZAYI ADET', 'TOPLAM CAM ZAYI ORANI'
-            ]
+            # 3. Filtreleme İşlemi
+            # 'ÜST BIRIM' sütununu bul (Büyük/küçük harf duyarlılığını aşmak için)
+            ub_col = next((c for c in df.columns if "ÜST BIRIM" in str(c).upper()), None)
             
-            mevcut_sutunlar = [col for col in hedef_sutunlar if col in df.columns]
-
-            if not mevcut_sutunlar:
-                st.warning("Aranan başlıklar bulunamadı. Bulunanlar: " + str(list(df.columns[:10])))
+            if ub_col:
+                # Veriyi sayısal değere çevirip filtrele (Hata payını azaltmak için)
+                df[ub_col] = pd.to_numeric(df[ub_col], errors='coerce')
+                df = df[df[ub_col].isin(filtre_kodlar)]
+            
+            if df.empty:
+                st.warning(f"Belirtilen {filtre_kodlar} kodlarına ait veri bulunamadı. Lütfen kodları kontrol edin.")
             else:
-                # Veriyi temizle (Boş satırları at, ilk 20 veriyi al)
-                df_final = df[mevcut_sutunlar].dropna(how='all').head(20)
+                # 4. Görselleştirme (Excel Biçimiyle Aynı)
+                df_final = df.fillna("") # Boş hücreleri temiz göster
 
-                # 5. Görselleştirme
-                fig, ax = plt.subplots(figsize=(14, len(df_final) * 0.7 + 2))
+                # Satır sayısına göre dinamik yükseklik
+                fig_height = max(4, len(df_final) * 0.8 + 2)
+                fig, ax = plt.subplots(figsize=(20, fig_height))
                 ax.axis('off')
 
+                # Tablo oluşturma
                 tablo = ax.table(
                     cellText=df_final.values, 
                     colLabels=df_final.columns, 
@@ -60,22 +61,26 @@ if uploaded_file is not None:
                     colColours=["#2c3e50"] * len(df_final.columns)
                 )
 
+                # Stil Ayarları
                 tablo.auto_set_font_size(False)
-                tablo.set_fontsize(10)
-                tablo.scale(1, 3)
+                tablo.set_fontsize(9)
+                tablo.scale(1, 3.5) # Satır yüksekliğini Excel'e benzer şekilde genişletir
 
-                # Başlıkları beyaz ve kalın yap
+                # Başlıkları Beyaz ve Kalın Yap
                 for j in range(len(df_final.columns)):
                     tablo[0, j].get_text().set_color('white')
                     tablo[0, j].get_text().set_weight('bold')
 
+                # Çıktı
                 buf = io.BytesIO()
                 plt.savefig(buf, format='png', dpi=200, bbox_inches='tight')
                 buf.seek(0)
 
-                st.success("✅ Tablo başarıyla oluşturuldu!")
+                st.success(f"✅ {len(df_final)} Mağaza için rapor hazırlandı.")
                 st.image(buf)
-                st.download_button("Raporu İndir", buf, "rapor.png", "image/png")
+                st.download_button("Görseli Kaydet (PNG)", buf, "ozel_mağaza_raporu.png", "image/png")
+        else:
+            st.error("Başlık satırı (ÜST BİRİM) bulunamadı.")
 
     except Exception as e:
         st.error(f"Bir hata oluştu: {e}")
