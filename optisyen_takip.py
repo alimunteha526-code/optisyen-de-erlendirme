@@ -4,12 +4,12 @@ import matplotlib.pyplot as plt
 import io
 import numpy as np
 
-# Sayfa Ayarları - Hafif Mod
+# Sayfa Ayarları
 st.set_page_config(page_title="Zayi Raporu İşleyici", layout="centered")
 
 st.title("📊 Cam Zayi Raporu - Düzenlenmiş Versiyon")
 st.markdown("---")
-st.info("ℹ️ İlk iki sütun kaldırıldı. Doğrudan 'Üst Birim'den başlayan raporu indirebilirsiniz.")
+st.info("✅ İlk iki sütun kaldırıldı ve sayısal hatalar temizlendi.")
 
 # Mağaza Listesi
 istenen_magazalar = [
@@ -37,40 +37,42 @@ if uploaded_file is not None:
         df = df[1:].reset_index(drop=True)
         
         # --- İLK İKİ SÜTUNU SİLME ---
-        # 0 ve 1. indexteki sütunları kaldırıyoruz
         df = df.iloc[:, 2:] 
-        # ----------------------------
         
-        # Filtreleme ve Temizlik
+        # Filtreleme
         ub_col = next((c for c in df.columns if "ÜST BIRIM" in str(c).upper()), df.columns[0])
         df[ub_col] = df[ub_col].astype(str).str.strip()
         df_final = df[df[ub_col].isin(istenen_magazalar)].copy()
         
-        # Hata Giderme (#SAYI! / INF temizliği)
-        df_final = df_final.replace([np.inf, -np.inf], np.nan).fillna("-")
+        # --- NAN/INF HATASI ÇÖZÜMÜ ---
+        # Tüm sütunlardaki sayısal hataları ve sonsuz değerleri temizler
+        df_final = df_final.replace([np.inf, -np.inf], np.nan)
+        df_final = df_final.fillna("-") 
+        # -----------------------------
 
         if df_final.empty:
             st.error("❌ Belirtilen mağaza kodları dosyada bulunamadı.")
         else:
-            st.success(f"✅ {len(df_final)} Mağaza verisi hazırlandı (İlk 2 sütun hariç).")
+            st.success(f"✅ {len(df_final)} Mağaza verisi hazırlandı.")
             
-            # İndirme Butonları
             col1, col2 = st.columns(2)
             
             with col1:
-                # 📥 EXCEL ÇIKTISI (Lacivert Biçimli)
+                # 📥 EXCEL ÇIKTISI (Hata korumalı seçenek eklendi)
                 exc_buf = io.BytesIO()
-                with pd.ExcelWriter(exc_buf, engine='xlsxwriter') as writer:
+                # 'nan_inf_to_errors' seçeneği Workbook düzeyinde eklendi
+                with pd.ExcelWriter(exc_buf, engine='xlsxwriter', engine_kwargs={'options': {'nan_inf_to_errors': True}}) as writer:
                     df_final.to_excel(writer, index=False, sheet_name='Rapor')
                     header_fmt = writer.book.add_format({
                         'bold': True, 'bg_color': '#1F4E78', 'font_color': 'white', 'border': 1
                     })
                     for col_num, value in enumerate(df_final.columns.values):
                         writer.sheets['Rapor'].write(0, col_num, value, header_fmt)
+                
                 st.download_button("📥 Excel Olarak İndir", exc_buf.getvalue(), "zayi_raporu_yeni.xlsx", use_container_width=True)
 
             with col2:
-                # 🖼️ FOTOĞRAF ÇIKTISI (Orijinal Görünüm)
+                # 🖼️ FOTOĞRAF ÇIKTISI
                 f_width = max(18, len(df_final.columns) * 1.5)
                 f_height = max(8, len(df_final) * 0.8 + 2)
                 fig, ax = plt.subplots(figsize=(f_width, f_height), dpi=100)
