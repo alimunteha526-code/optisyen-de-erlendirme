@@ -1,61 +1,65 @@
 import pandas as pd
 import matplotlib.pyplot as plt
-import tkinter as tk
-from tkinter import filedialog, messagebox
+import io
 
-def excel_to_jpg():
-    # 1. Dosya Seçme Penceresi
-    dosya_yolu = filedialog.askopenfilename(filetypes=[("Excel Files", "*.xlsx *.csv")])
-    if not dosya_yolu:
-        return
+# Sunucu ortamlarında GUI hatası almamak için backend ayarı
+plt.switch_backend('Agg')
 
+def excel_to_jpg_logic(uploaded_file):
     try:
-        # 2. Veriyi Oku (Excel veya CSV)
-        if dosya_yolu.endswith('.csv'):
-            df = pd.read_csv(dosya_yolu)
+        # 1. Dosyayı oku
+        if uploaded_file.name.endswith('.csv'):
+            df = pd.read_csv(uploaded_file)
         else:
-            df = pd.read_excel(dosya_yolu)
+            df = pd.read_excel(uploaded_file)
 
-        # 3. Senin istediğin sütunları filtreleyelim (Dosyandaki isimlere göre)
-        # Eğer sütun isimleri farklıysa burayı güncelleyebiliriz
+        # 2. Senin "düzenlenmiş" dosyandaki sütun yapısına göre filtreleme
+        # Sütun isimleri birebir aynı olmalıdır (Büyük/Küçük harfe duyarlı)
         secilecek_sutunlar = ['STOK ADI', 'EN', 'BOY', 'ADET', 'TOPLAM m2', 'FİRE NEDENİ']
+        
+        # Dosyada mevcut olan sütunları seç
         mevcut_sutunlar = [col for col in secilecek_sutunlar if col in df.columns]
-        df_son = df[mevcut_sutunlar].head(20) # İlk 20 satırı alalım (Görselin netliği için)
+        
+        if not mevcut_sutunlar:
+            return None, "Seçilen sütunlar dosyada bulunamadı. Lütfen sütun isimlerini kontrol edin."
 
-        # 4. Tabloyu Görselleştirme
-        fig, ax = plt.subplots(figsize=(12, len(df_son) * 0.6))
+        # İlk 20 satırı alalım (Görselin okunabilir kalması için)
+        df_son = df[mevcut_sutunlar].head(20)
+
+        # 3. Görselleştirme
+        fig, ax = plt.subplots(figsize=(12, len(df_son) * 0.8 + 1))
         ax.axis('off')
         
-        # Renkli ve şık bir tablo tasarımı
-        the_table = ax.table(cellText=df_son.values, colLabels=df_son.columns, 
-                            loc='center', cellLoc='center')
+        # Tabloyu oluştur
+        the_table = ax.table(
+            cellText=df_son.values, 
+            colLabels=df_son.columns, 
+            loc='center', 
+            cellLoc='center'
+        )
         
+        # Stil ayarları
         the_table.auto_set_font_size(False)
         the_table.set_fontsize(10)
-        the_table.scale(1.2, 1.8)
+        the_table.scale(1.2, 2.5) # Satırları biraz daha genişletir
 
-        # Başlık ekle
-        plt.title("Cam Zayi Raporu - Düzenlenmiş Liste", fontsize=14, pad=20)
+        # Renklendirme (Opsiyonel: Başlık satırını boyar)
+        for (row, col), cell in the_table.get_celld().items():
+            if row == 0:
+                cell.set_text_props(weight='bold', color='white')
+                cell.set_facecolor('#4c5c96')
 
-        # 5. Kaydetme
-        cikis_yolu = filedialog.asksaveasfilename(defaultextension=".jpg")
-        if cikis_yolu:
-            plt.savefig(cikis_yolu, dpi=300, bbox_inches='tight')
-            messagebox.showinfo("Başarılı", "JPG dosyası oluşturuldu!")
+        plt.title("Cam Zayi Raporu - Düzenlenmiş Liste", fontsize=16, pad=30)
+
+        # 4. Belleğe kaydet (JPG olarak)
+        buf = io.BytesIO()
+        plt.savefig(buf, format='jpg', dpi=200, bbox_inches='tight')
+        buf.seek(0)
+        return buf, None
 
     except Exception as e:
-        messagebox.showerror("Hata", f"Bir sorun oluştu: {e}")
+        return None, str(e)
 
-# Basit Arayüz Tasarımı
-root = tk.Tk()
-root.title("Cam Zayi - Excel to JPG")
-root.geometry("300x150")
-
-label = tk.Label(root, text="Cam Zayi Raporu Dönüştürücü", pady=10)
-label.pack()
-
-btn = tk.Button(root, text="Excel Seç ve JPG Yap", command=excel_to_jpg, 
-                bg="#4CAF50", fg="white", padx=10, pady=5)
-btn.pack(pady=10)
-
-root.mainloop()
+# --- Buradan sonrası eğer Streamlit kullanıyorsan geçerlidir ---
+# Eğer yerel bilgisayarda (Tkinter ile) kullanacaksan önceki mesajdaki 
+# GUI kodunu bu mantıkla birleştirebilirsin.
