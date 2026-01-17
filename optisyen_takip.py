@@ -3,70 +3,63 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import io
 
-st.set_page_config(page_title="Cam Zayi Raporu", layout="wide")
-st.title("📊 Cam Zayi Raporu - Görselleştirici")
+st.set_page_config(page_title="Operasyon Zayi Raporu", layout="wide")
+st.title("📊 Cam Zayi Operasyon Raporu")
 
-uploaded_file = st.file_uploader("Excel veya CSV dosyasını seçin", type=['xlsx', 'csv'])
+uploaded_file = st.file_uploader("Excel dosyasını seçin", type=['xlsx', 'csv'])
 
 if uploaded_file is not None:
     try:
-        # 1. Dosyayı ham olarak oku
-        if uploaded_file.name.endswith('.csv'):
-            df_raw = pd.read_csv(uploaded_file)
-        else:
-            df_raw = pd.read_excel(uploaded_file, header=None) # Önce başlık olmadan oku
-
-        # 2. Gerçek başlık satırını bulma (Header bulma mantığı)
-        # 'STOK ADI' veya 'EN' kelimesinin geçtiği ilk satırı başlık yapalım
-        header_row = 0
-        for i, row in df_raw.iterrows():
-            row_str = " ".join(map(str, row.values)).upper()
-            if 'STOK ADI' in row_str or 'EN' in row_str or 'FİRE' in row_str:
-                header_row = i
-                break
+        # 1. Dosyayı oku
+        df = pd.read_excel(uploaded_file) if uploaded_file.name.endswith('.xlsx') else pd.read_csv(uploaded_file)
         
-        # Dosyayı bulduğumuz satırdan itibaren tekrar yapılandır
-        df = df_raw.iloc[header_row:].copy()
-        df.columns = df.iloc[0] # İlk satırı başlık yap
-        df = df[1:] # Veriyi bir alt satırdan başlat
-        
-        # Sütun isimlerini temizle
+        # Sütunları temizle
         df.columns = df.columns.astype(str).str.strip().str.upper()
 
-        # 3. İstenen Sütunları Seç
-        hedef_sutunlar = ['STOK ADI', 'EN', 'BOY', 'ADET', 'TOPLAM M2', 'FİRE NEDENİ']
-        # Eğer TOPLAM M2 bulamazsa sadece M2'yi de arasın
-        if 'TOPLAM M2' not in df.columns and 'M2' in df.columns:
-             df.rename(columns={'M2': 'TOPLAM M2'}, inplace=True)
-        
-        mevcut_sutunlar = [col for col in hedef_sutunlar if col in df.columns]
+        # 2. Sizin paylaştığınız yeni sütun yapısına göre eşleştirme
+        # Kod artık hem eski teknik detayları hem de yeni operasyonel başlıkları arar
+        esleme_haritasi = {
+            'BÖLGE': 'BÖLGE',
+            'ÜST BIRIM': 'ÜST BIRIM',
+            'NET SATIŞ MIKTARI (CAM)': 'SATIŞ MİKTARI',
+            'TOPLAM CAM ZAYI ADET': 'ZAYİ ADET',
+            'TOPLAM CAM ZAYI ORANI': 'ZAYİ ORANI',
+            'TOPLAM CAM ZAYI HEDEF': 'HEDEF',
+            'MAGAZANIN ETKISINDE OLAN CAM ZAYILER': 'MAĞAZA ETKİSİ'
+        }
+
+        # Mevcut olanları seç
+        mevcut_sutunlar = [col for col in esleme_haritasi.keys() if col in df.columns]
 
         if not mevcut_sutunlar:
-            st.error(f"Sütunlar yine bulunamadı. Lütfen kontrol et: {list(df.columns[:10])}")
+            st.error(f"Dosyada raporlanabilir sütun bulunamadı. Mevcut sütunlar: {list(df.columns[:5])}...")
         else:
-            # Temiz veri seti (ilk 25 satır)
-            df_display = df[mevcut_sutunlar].dropna(subset=[mevcut_sutunlar[0]]).head(25)
+            # Veriyi hazırla (Görselde çok sütun olmaması için en kritikleri alalım)
+            df_final = df[mevcut_sutunlar].head(20)
             
-            # 4. Görselleştirme
-            row_count = len(df_display)
-            fig_height = max(3, row_count * 0.6 + 1.5)
-            
-            fig, ax = plt.subplots(figsize=(14, fig_height))
+            # Sütun isimlerini daha kısa hale getirelim (Görsel sığsın diye)
+            df_final.columns = [esleme_haritasi[c] for c in df_final.columns]
+
+            # 3. Görselleştirme
+            row_count = len(df_final)
+            fig_height = max(4, row_count * 0.7 + 2)
+            fig, ax = plt.subplots(figsize=(16, fig_height))
             ax.axis('off')
-            
+
             tablo = ax.table(
-                cellText=df_display.values, 
-                colLabels=df_display.columns, 
+                cellText=df_final.values, 
+                colLabels=df_final.columns, 
                 loc='center', 
                 cellLoc='center',
-                colColours=["#2c3e50"] * len(df_display.columns)
+                colColours=["#2c3e50"] * len(df_final.columns)
             )
-            
-            tablo.auto_set_font_size(False)
-            tablo.set_fontsize(10)
-            tablo.scale(1, 2.8)
 
-            for j in range(len(df_display.columns)):
+            tablo.auto_set_font_size(False)
+            tablo.set_fontsize(9)
+            tablo.scale(1, 3) # Satır yüksekliği
+
+            # Başlık stilini düzenle
+            for j in range(len(df_final.columns)):
                 tablo[0, j].get_text().set_color('white')
                 tablo[0, j].get_text().set_weight('bold')
 
@@ -74,9 +67,9 @@ if uploaded_file is not None:
             plt.savefig(buf, format='png', dpi=200, bbox_inches='tight')
             buf.seek(0)
 
-            st.success("✅ Başlıklar başarıyla hizalandı ve tablo oluşturuldu!")
+            st.success("✅ Operasyonel veriler başarıyla tabloya dönüştürüldü!")
             st.image(buf)
-            st.download_button("Görseli İndir", buf, "rapor.png", "image/png")
+            st.download_button("Raporu Görsel Olarak İndir", buf, "operasyon_raporu.png", "image/png")
 
     except Exception as e:
-        st.error(f"Bir hata oluştu: {e}")
+        st.error(f"İşlem sırasında hata: {e}")
