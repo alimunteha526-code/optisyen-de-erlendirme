@@ -3,77 +3,75 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import io
 
-st.set_page_config(page_title="Tüm Mağazalar Zayi Raporu", layout="wide")
-st.title("📊 Tüm Mağazalar Cam Zayi Raporu")
+st.set_page_config(page_title="Optisyen Zayi Raporu", layout="wide")
+
+st.title("📊 Cam Zayi Raporu - Orijinal Biçim")
 
 uploaded_file = st.file_uploader("Excel dosyasını yükleyin", type=['xlsx'])
 
 if uploaded_file is not None:
     try:
-        # 1. Dosyayı oku
+        # 1. Excel'i ham haliyle oku
         df_raw = pd.read_excel(uploaded_file, header=None)
         
-        # 2. Gerçek başlık satırını bul (ÜST BIRIM kelimesini içeren satır)
-        target_idx = None
+        # 2. Gerçek tablo başlangıcını bul (Bölge/Üst Birim araması)
+        start_row = 0
         for i, row in df_raw.iterrows():
-            if "ÜST BIRIM" in " ".join(map(str, row.values)).upper():
-                target_idx = i
+            line = " ".join(map(str, row.values)).upper()
+            if "ÜST BIRIM" in line or "BÖLGE" in line:
+                start_row = i
                 break
         
-        if target_idx is not None:
-            # Tabloyu yapılandır
-            df = df_raw.iloc[target_idx:].copy()
-            df.columns = df.iloc[0]
-            df = df[1:].reset_index(drop=True)
-            
-            # Sütunları temizle (İsimsiz kolonları ve noktaları kaldır)
-            df = df.loc[:, df.columns.notna()]
-            df = df.loc[:, ~df.columns.astype(str).str.contains('^Unnamed|^\\.')]
+        # Tabloyu yapılandır
+        df = df_raw.iloc[start_row:].copy()
+        df.columns = df.iloc[0] # Excel'deki orijinal başlıklar
+        df = df[1:].reset_index(drop=True)
+        
+        # Gereksiz tamamen boş sütunları ve satırları temizle
+        df = df.dropna(how='all', axis=0).dropna(how='all', axis=1)
+        
+        # 'M' ile başlayan mağaza kodlarını içeren satırları filtrele (Opsiyonel)
+        # Eğer tüm satırları istiyorsan bu kısmı bırakabiliriz
+        ub_col = df.columns[2] # Genelde 3. sütun Üst Birimdir
+        df = df[df[ub_col].astype(str).str.contains('M', na=False)]
 
-            # Boş satırları temizle (Mağaza kodu boş olanları at)
-            ub_col = next((c for c in df.columns if "ÜST BIRIM" in str(c).upper()), df.columns[0])
-            df = df.dropna(subset=[ub_col])
-
-            # 3. Görselleştirme Ayarları
-            df_final = df.fillna(0) # Sayısal boşluklara 0 yaz
+        if not df.empty:
+            # 3. GÖRSELLEŞTİRME (Excel gibi geniş ve okunaklı)
+            # Sütun sayısı çok fazla olduğu için genişliği artırıyoruz
+            col_count = len(df.columns)
+            row_count = len(df)
             
-            # Dinamik Boyutlandırma: Mağaza sayısı arttıkça tablo uzasın
-            fig_height = max(6, len(df_final) * 0.5 + 2)
-            fig_width = max(15, len(df_final.columns) * 1.5)
-            
-            fig, ax = plt.subplots(figsize=(fig_width, fig_height))
+            fig, ax = plt.subplots(figsize=(col_count * 1.8, row_count * 0.6 + 2))
             ax.axis('off')
 
-            # Tabloyu oluştur
+            # Tabloyu çiz
             tablo = ax.table(
-                cellText=df_final.values, 
-                colLabels=df_final.columns, 
-                loc='center', 
-                cellLoc='center',
-                colColours=["#2c3e50"] * len(df_final.columns)
+                cellText=df.values,
+                colLabels=df.columns,
+                loc='center',
+                cellLoc='left' # Excel gibi sola yaslı
             )
 
-            # Stil: Yazı tipi ve hücre yüksekliği
+            # Stil Ayarları
             tablo.auto_set_font_size(False)
-            tablo.set_fontsize(8)
-            tablo.scale(1, 3) # Satırları Excel gibi ferahlatır
+            tablo.set_fontsize(10)
+            tablo.scale(1, 2.5) # Satırları genişlet
 
-            # Başlıkları Beyaz Yap
-            for j in range(len(df_final.columns)):
-                tablo[0, j].get_text().set_color('white')
+            # Başlık satırını boya (Excel stili)
+            for j in range(col_count):
                 tablo[0, j].get_text().set_weight('bold')
+                tablo[0, j].set_facecolor('#D3D3D3') # Açık gri başlık
 
-            # Resmi Belleğe Kaydet
+            # PNG olarak kaydet
             buf = io.BytesIO()
             plt.savefig(buf, format='png', dpi=150, bbox_inches='tight')
             buf.seek(0)
 
-            st.success(f"✅ Toplam {len(df_final)} mağaza başarıyla listelendi.")
+            st.success(f"✅ {row_count} Mağaza Excel formatında hazırlandı.")
             st.image(buf)
-            st.download_button("Tüm Listeyi Görsel Olarak İndir", buf, "tam_mağaza_listesi.png", "image/png")
-        
+            st.download_button("Resmi Farklı Kaydet", buf, "zayi_raporu.png", "image/png")
         else:
-            st.error("Başlık satırı bulunamadı. Lütfen dosyada 'ÜST BİRİM' sütunu olduğundan emin olun.")
+            st.warning("Eşleşen mağaza verisi bulunamadı.")
 
     except Exception as e:
-        st.error(f"İşlem sırasında bir hata oluştu: {e}")
+        st.error(f"Hata: {e}")
