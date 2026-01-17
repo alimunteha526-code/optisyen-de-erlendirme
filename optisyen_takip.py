@@ -2,11 +2,13 @@ import streamlit as st
 import openpyxl
 import io
 
-st.set_page_config(page_title="Zayi Raporu - Kesin Çözüm", layout="wide")
+# Sayfa Yapılandırması
+st.set_page_config(page_title="Zayi Raporu - Birleştirmesiz", layout="wide")
 
-st.title("📊 Cam Zayi Raporu - Hata Onarılmış Sürüm")
-st.info("✅ '231, 3' hatası giderildi. Gizli satırlar silindi ve birleştirmeler güvenli bir şekilde kaldırıldı.")
+st.title("📊 Cam Zayi Raporu - Saf Veri Düzeni")
+st.info("✅ 'Birleştir ve Ortala' özellikleri kaldırıldı. Her veri kendi hücresine ayrıldı.")
 
+# Mağaza Kodları ve İsimleri
 magaza_sozlugu = {
     "M38001": "KAYSERI PARK AVM", "M38002": "KAYSERI MEYSU OUTLET AVM",
     "M38003": "FORUM KAYSERI AVM", "M38004": "KAYSERI KUMSMALL AVM",
@@ -23,48 +25,39 @@ uploaded_file = st.file_uploader("Orijinal Excel dosyasını yükleyin", type=['
 
 if uploaded_file is not None:
     try:
-        # 1. Dosyayı Yükle
         wb = openpyxl.load_workbook(uploaded_file, data_only=False)
         ws = wb.active
 
-        # 2. BİRLEŞTİRİLMİŞ HÜCRELERİ GÜVENLİCE ÇÖZ (Hata önleyici döngü)
-        # Bazı birleştirmeler silinen satırlar nedeniyle boşa düşebilir, bu yüzden try-except ile geçiyoruz
-        merged_ranges = list(ws.merged_cells.ranges)
-        for m_range in merged_ranges:
-            try:
-                ws.unmerge_cells(str(m_range))
-            except:
-                continue
+        # 1. TÜM BİRLEŞTİRİLMİŞ HÜCRELERİ ÇÖZ (Unmerge)
+        # Bu işlem 'Birleştir ve Ortala' yapılmış tüm hücreleri bağımsız hale getirir.
+        merged_cells_range = list(ws.merged_cells.ranges)
+        for cell_group in merged_cells_range:
+            ws.unmerge_cells(str(cell_group))
 
-        # 3. GİZLİ SATIR VE SÜTUNLARI TAMAMEN SİL
-        # Satırlar (Sondan başa doğru silmek kaymaları önler)
-        for row_idx in range(ws.max_row, 0, -1):
-            if ws.row_dimensions[row_idx].hidden:
-                ws.delete_rows(row_idx)
-        
-        # Sütunlar
-        for col_idx in range(ws.max_column, 0, -1):
-            col_letter = openpyxl.utils.get_column_letter(col_idx)
-            if ws.column_dimensions[col_letter].hidden:
-                ws.delete_cols(col_idx)
+        # 2. Gruplandırma (+/-) Butonlarını Temizle
+        ws.sheet_format.outlineLevelRow = 0
+        for r in range(1, ws.max_row + 1):
+            ws.row_dimensions[r].outline_level = 0
 
-        # 4. BAŞLIK TESPİTİ
+        # 3. Başlık ve Üst Birim Tespiti
         header_row, ub_col_idx = 1, 1
         found = False
         for r in range(1, 30):
             for c in range(1, 15):
-                if "ÜST BIRIM" in str(ws.cell(r, c).value).upper():
+                val = str(ws.cell(r, c).value).strip().upper()
+                if "ÜST BIRIM" in val:
                     header_row, ub_col_idx, found = r, c, True
                     break
             if found: break
 
-        # 5. SOL SÜTUNLARI VE ÜST BOŞLUĞU SİL
-        if ub_col_idx > 1: ws.delete_cols(1, ub_col_idx - 1)
-        if header_row > 1: ws.delete_rows(1, header_row - 1)
-        header_row = 1
+        # 4. Sol Sütunları ve Üst Boşlukları Sil
+        if ub_col_idx > 1:
+            ws.delete_cols(1, ub_col_idx - 1)
+        if header_row > 1:
+            ws.delete_rows(1, header_row - 1)
+            header_row = 1
 
-        # 6. MAĞAZA FİLTRESİ VE İSİM YAZIMI
-        # Gizli hücreler silindiği için artık sadece gerçek veriler kaldı
+        # 5. Mağazaları Filtrele ve İsimleri Yaz
         max_row = ws.max_row
         for r in range(max_row, header_row, -1):
             m_kodu = str(ws.cell(r, 1).value).strip()
@@ -76,27 +69,25 @@ if uploaded_file is not None:
             elif m_kodu == "None" or m_kodu == "":
                 if r > header_row: ws.delete_rows(r)
 
-        # 7. GÖRSEL DÜZENLEME
+        # 6. Görsel Düzenlemeler
         ws.row_dimensions[1].height = 60
         ws.column_dimensions['A'].width = 12
         ws.column_dimensions['B'].width = 30
         
-        # Stil temizliği: Tüm hücreleri standart hizalamaya getir
-        for row in ws.iter_rows(min_row=1, max_row=ws.max_row):
-            for cell in row:
-                cell.alignment = openpyxl.styles.Alignment(horizontal='left', vertical='center')
+        # Birleştirme kalktığı için başlıkları tekrar ortalayalım (Hücre bazında)
+        for cell in ws[1]:
+            cell.alignment = openpyxl.styles.Alignment(horizontal='center', vertical='center', wrapText=True)
 
-        # 8. ÇIKTI
         output = io.BytesIO()
         wb.save(output)
         
-        st.success("✅ Hata giderildi ve dosya temizlendi!")
+        st.success("✅ Tüm birleştirmeler kaldırıldı ve rapor hazırlandı.")
         st.download_button(
-            label="📥 Sorunsuz Excel'i İndir",
+            label="📥 Birleştirmesiz Excel'i İndir",
             data=output.getvalue(),
-            file_name="Zayi_Raporu_Kesin_Sonuc.xlsx",
+            file_name="Zayi_Raporu_Unmerged.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
 
     except Exception as e:
-        st.error(f"Beklenmedik bir hata oluştu: {e}")
+        st.error(f"Hata: {e}")
