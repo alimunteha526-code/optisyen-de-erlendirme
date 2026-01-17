@@ -3,84 +3,82 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import io
 
-st.set_page_config(page_title="Özel Mağaza Raporu", layout="wide")
-st.title("📊 Mağaza Koduna Göre Filtrelenmiş Rapor")
+st.set_page_config(page_title="Mağaza Raporu", layout="wide")
 
-# --- BURAYI DÜZENLEYİN ---
-# Sadece bu listedeki mağaza kodları (Üst Birim) görünecek
-# Örnek: [101, 102, 205] gibi kodları buraya ekleyin
-filtre_kodlar = [101, 102] 
-# --------------------------
+# --- MAĞAZA KODLARINI BURAYA YAZIN ---
+# Örnek: ["M38002", "M06030"] gibi tırnak içinde ve tam yazın
+filtre_kodlar = ["M38002", "M06030", "M42001"] 
+# ------------------------------------
+
+st.title("📊 Özel Mağaza Zayi Raporu")
 
 uploaded_file = st.file_uploader("Excel dosyasını yükleyin", type=['xlsx'])
 
 if uploaded_file is not None:
     try:
-        # 1. Dosyayı ham oku ve gerçek başlığı bul
+        # 1. Ham veriyi oku
         df_raw = pd.read_excel(uploaded_file, header=None)
         
-        target_row_index = None
+        # 2. Başlık satırını dinamik olarak bul
+        header_row_idx = None
         for i, row in df_raw.iterrows():
-            row_content = " ".join([str(val).upper() for val in row.values])
-            if "ÜST BIRIM" in row_content or "BÖLGE" in row_content:
-                target_row_index = i
+            row_str = " ".join(map(str, row.values)).upper()
+            if "ÜST BIRIM" in row_str or "BÖLGE" in row_str:
+                header_row_idx = i
                 break
-
-        if target_row_index is not None:
-            # 2. Tabloyu yapılandır (Excel'deki orijinal sütun isimlerini koru)
-            df = df_raw.iloc[target_row_index:].copy()
-            df.columns = df.iloc[0] 
+        
+        if header_row_idx is not None:
+            # Tabloyu oluştur (Orijinal haliyle)
+            df = df_raw.iloc[header_row_idx:].copy()
+            df.columns = df.iloc[0] # Orijinal başlıklar
             df = df[1:].reset_index(drop=True)
             
-            # 3. Filtreleme İşlemi
-            # 'ÜST BIRIM' sütununu bul (Büyük/küçük harf duyarlılığını aşmak için)
+            # 3. Akıllı Filtreleme
+            # 'ÜST BIRIM' sütununu bul
             ub_col = next((c for c in df.columns if "ÜST BIRIM" in str(c).upper()), None)
             
             if ub_col:
-                # Veriyi sayısal değere çevirip filtrele (Hata payını azaltmak için)
-                df[ub_col] = pd.to_numeric(df[ub_col], errors='coerce')
-                df = df[df[ub_col].isin(filtre_kodlar)]
-            
-            if df.empty:
-                st.warning(f"Belirtilen {filtre_kodlar} kodlarına ait veri bulunamadı. Lütfen kodları kontrol edin.")
+                # Veriyi temizle ve filtrele (Büyük harf ve boşluk duyarlılığını kaldırır)
+                df[ub_col] = df[ub_col].astype(str).str.strip()
+                df_filtered = df[df[ub_col].isin(filtre_kodlar)]
+                
+                if df_filtered.empty:
+                    st.warning(f"Kodlar bulunamadı. Dosyadaki bazı örnek kodlar: {df[ub_col].head(3).tolist()}")
+                else:
+                    # 4. Görselleştirme (Dosyadaki biçimin aynısı)
+                    df_final = df_filtered.fillna("-")
+                    
+                    # Sayfa genişliğine göre tablo boyutunu ayarla
+                    fig, ax = plt.subplots(figsize=(24, len(df_final) * 0.8 + 2))
+                    ax.axis('off')
+
+                    tablo = ax.table(
+                        cellText=df_final.values, 
+                        colLabels=df_final.columns, 
+                        loc='center', 
+                        cellLoc='center',
+                        colColours=["#f2f2f2"] * len(df_final.columns) # Hafif gri başlıklar
+                    )
+
+                    tablo.auto_set_font_size(False)
+                    tablo.set_fontsize(8)
+                    tablo.scale(1, 4) # Excel'deki gibi geniş satırlar
+
+                    # Başlıkları koyu yap
+                    for j in range(len(df_final.columns)):
+                        tablo[0, j].get_text().set_weight('bold')
+
+                    buf = io.BytesIO()
+                    plt.savefig(buf, format='png', dpi=300, bbox_inches='tight')
+                    buf.seek(0)
+
+                    st.success(f"Filtrelendi: {len(df_final)} satır listeleniyor.")
+                    st.image(buf)
+                    st.download_button("Görseli JPG/PNG Olarak İndir", buf, "rapor.png", "image/png")
             else:
-                # 4. Görselleştirme (Excel Biçimiyle Aynı)
-                df_final = df.fillna("") # Boş hücreleri temiz göster
-
-                # Satır sayısına göre dinamik yükseklik
-                fig_height = max(4, len(df_final) * 0.8 + 2)
-                fig, ax = plt.subplots(figsize=(20, fig_height))
-                ax.axis('off')
-
-                # Tablo oluşturma
-                tablo = ax.table(
-                    cellText=df_final.values, 
-                    colLabels=df_final.columns, 
-                    loc='center', 
-                    cellLoc='center',
-                    colColours=["#2c3e50"] * len(df_final.columns)
-                )
-
-                # Stil Ayarları
-                tablo.auto_set_font_size(False)
-                tablo.set_fontsize(9)
-                tablo.scale(1, 3.5) # Satır yüksekliğini Excel'e benzer şekilde genişletir
-
-                # Başlıkları Beyaz ve Kalın Yap
-                for j in range(len(df_final.columns)):
-                    tablo[0, j].get_text().set_color('white')
-                    tablo[0, j].get_text().set_weight('bold')
-
-                # Çıktı
-                buf = io.BytesIO()
-                plt.savefig(buf, format='png', dpi=200, bbox_inches='tight')
-                buf.seek(0)
-
-                st.success(f"✅ {len(df_final)} Mağaza için rapor hazırlandı.")
-                st.image(buf)
-                st.download_button("Görseli Kaydet (PNG)", buf, "ozel_mağaza_raporu.png", "image/png")
+                st.error("Sütunlar arasında 'Üst Birim' bulunamadı.")
         else:
-            st.error("Başlık satırı (ÜST BİRİM) bulunamadı.")
+            st.error("Başlık satırı bulunamadı. Lütfen Excel sayfasını kontrol edin.")
 
     except Exception as e:
-        st.error(f"Bir hata oluştu: {e}")
+        st.error(f"Hata: {e}")
