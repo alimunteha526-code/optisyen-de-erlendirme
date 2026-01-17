@@ -3,75 +3,85 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import io
 
-st.set_page_config(page_title="Optisyen Zayi Raporu", layout="wide")
-
-st.title("📊 Cam Zayi Raporu - Orijinal Biçim")
+st.set_page_config(page_title="Zayi Raporu Merkezi", layout="wide")
+st.title("📊 Cam Zayi Raporu - İndirme Merkezi")
 
 uploaded_file = st.file_uploader("Excel dosyasını yükleyin", type=['xlsx'])
 
 if uploaded_file is not None:
     try:
-        # 1. Excel'i ham haliyle oku
+        # 1. Dosyayı ham oku ve gerçek başlıkları bul
         df_raw = pd.read_excel(uploaded_file, header=None)
         
-        # 2. Gerçek tablo başlangıcını bul (Bölge/Üst Birim araması)
         start_row = 0
         for i, row in df_raw.iterrows():
-            line = " ".join(map(str, row.values)).upper()
-            if "ÜST BIRIM" in line or "BÖLGE" in line:
+            row_str = " ".join(map(str, row.values)).upper()
+            if "ÜST BIRIM" in row_str or "BÖLGE" in row_str:
                 start_row = i
                 break
         
         # Tabloyu yapılandır
         df = df_raw.iloc[start_row:].copy()
-        df.columns = df.iloc[0] # Excel'deki orijinal başlıklar
+        df.columns = df.iloc[0] 
         df = df[1:].reset_index(drop=True)
         
-        # Gereksiz tamamen boş sütunları ve satırları temizle
-        df = df.dropna(how='all', axis=0).dropna(how='all', axis=1)
+        # Boş sütunları ve satırları temizle
+        df = df.dropna(how='all', axis=1).dropna(how='all', axis=0)
         
-        # 'M' ile başlayan mağaza kodlarını içeren satırları filtrele (Opsiyonel)
-        # Eğer tüm satırları istiyorsan bu kısmı bırakabiliriz
-        ub_col = df.columns[2] # Genelde 3. sütun Üst Birimdir
-        df = df[df[ub_col].astype(str).str.contains('M', na=False)]
+        # --- TÜM MAĞAZALARI VE SÜTUNLARI TUT ---
+        df_final = df.fillna("-")
 
-        if not df.empty:
-            # 3. GÖRSELLEŞTİRME (Excel gibi geniş ve okunaklı)
-            # Sütun sayısı çok fazla olduğu için genişliği artırıyoruz
-            col_count = len(df.columns)
-            row_count = len(df)
-            
-            fig, ax = plt.subplots(figsize=(col_count * 1.8, row_count * 0.6 + 2))
-            ax.axis('off')
-
-            # Tabloyu çiz
-            tablo = ax.table(
-                cellText=df.values,
-                colLabels=df.columns,
-                loc='center',
-                cellLoc='left' # Excel gibi sola yaslı
+        # --- ARAYÜZ SEÇENEKLERİ ---
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            # EXCEL OLARAK İNDİRME
+            output = io.BytesIO()
+            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                df_final.to_excel(writer, index=False, sheet_name='Düzenlenmiş Rapor')
+            excel_data = output.getvalue()
+            st.download_button(
+                label="📥 Düzenlenmiş Excel'i İndir",
+                data=excel_data,
+                file_name="cam_zayi_raporu_duzenli.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
 
-            # Stil Ayarları
+        with col2:
+            # FOTOĞRAF OLUŞTURMA
+            fig_width = max(18, len(df_final.columns) * 1.5)
+            fig_height = max(6, len(df_final) * 0.6 + 2)
+            fig, ax = plt.subplots(figsize=(fig_width, fig_height))
+            ax.axis('off')
+
+            tablo = ax.table(
+                cellText=df_final.values, 
+                colLabels=df_final.columns, 
+                loc='center', 
+                cellLoc='center'
+            )
             tablo.auto_set_font_size(False)
-            tablo.set_fontsize(10)
-            tablo.scale(1, 2.5) # Satırları genişlet
+            tablo.set_fontsize(9)
+            tablo.scale(1, 2.8)
 
-            # Başlık satırını boya (Excel stili)
-            for j in range(col_count):
+            for j in range(len(df_final.columns)):
+                tablo[0, j].set_facecolor('#4e73df')
+                tablo[0, j].get_text().set_color('white')
                 tablo[0, j].get_text().set_weight('bold')
-                tablo[0, j].set_facecolor('#D3D3D3') # Açık gri başlık
 
-            # PNG olarak kaydet
             buf = io.BytesIO()
             plt.savefig(buf, format='png', dpi=150, bbox_inches='tight')
             buf.seek(0)
+            
+            st.download_button(
+                label="🖼️ Raporu Fotoğraf (PNG) Olarak İndir",
+                data=buf,
+                file_name="zayi_raporu_gorsel.png",
+                mime="image/png"
+            )
 
-            st.success(f"✅ {row_count} Mağaza Excel formatında hazırlandı.")
-            st.image(buf)
-            st.download_button("Resmi Farklı Kaydet", buf, "zayi_raporu.png", "image/png")
-        else:
-            st.warning("Eşleşen mağaza verisi bulunamadı.")
+        st.subheader("Tablo Önizlemesi")
+        st.dataframe(df_final) # Ekranda tabloyu göster
 
     except Exception as e:
-        st.error(f"Hata: {e}")
+        st.error(f"Hata oluştu: {e}")
