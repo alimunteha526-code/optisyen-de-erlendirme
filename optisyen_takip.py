@@ -1,44 +1,70 @@
+import streamlit as st
 import pandas as pd
 import random
+from io import BytesIO
 
-# 1. Veri Hazırlığı: Şubeler ve Çalışan Listesi
-subeler = ["Kadıköy Şubesi", "Beşiktaş Şubesi", "Şişli Şubesi"]
-calisanlar = [
-    "Ahmet", "Ayşe", "Mehmet", "Fatma", "Can", 
-    "Ece", "Ali", "Zeynep", "Burak", "Deniz", 
-    "Selin", "Mert"
-]
+# Sayfa Ayarları
+st.set_page_config(page_title="Vardiya Takip Paneli", layout="wide")
 
-def vardiya_olustur(calisan_listesi, sube_listesi):
-    # Listeyi karıştırarak her seferinde farklı sonuç alalım
-    random.shuffle(calisan_listesi)
+st.title("🗓️ Şube Vardiya Planlama Paneli")
+st.markdown("---")
+
+# Yan Menü: Ayarlar
+st.sidebar.header("⚙️ Yapılandırma")
+
+# Şube İsimleri
+sube_1 = st.sidebar.text_input("1. Şube Adı", "Merkez Şube")
+sube_2 = st.sidebar.text_input("2. Şube Adı", "Çarşı Şube")
+sube_3 = st.sidebar.text_input("3. Şube Adı", "AVM Şubesi")
+subeler = [sube_1, sube_2, sube_3]
+
+# Çalışan Listesi
+varsayilan_calisanlar = "Ahmet, Ayşe, Mehmet, Fatma, Can, Ece, Ali, Zeynep, Burak, Deniz, Selin, Mert"
+calisan_input = st.sidebar.text_area("Çalışan Listesi (Virgülle ayırın)", varsayilan_calisanlar)
+calisanlar = [name.strip() for name in calisan_input.split(",") if name.strip()]
+
+# Vardiya Oluşturma Fonksiyonu
+def plan_olustur():
+    if len(calisanlar) < 12:
+        st.error(f"⚠️ Yetersiz personel! 3 şube için en az 12 kişi lazım. Şu an: {len(calisanlar)}")
+        return None
     
-    plan = []
-    index = 0
+    secilenler = random.sample(calisanlar, 12)
+    random.shuffle(secilenler)
     
-    # Her şubeye 4 kişi atayacak şekilde (2 Sabah, 2 Akşam) bir döngü
-    for sube in sube_listesi:
-        # Sabah Vardiyası (Örnek: 2 kişi)
-        sabah = calisan_listesi[index:index+2]
-        index += 2
-        
-        # Akşam Vardiyası (Örnek: 2 kişi)
-        aksam = calisan_listesi[index:index+2]
-        index += 2
-        
-        plan.append({
+    veriler = []
+    for i, sube in enumerate(subeler):
+        sabah = secilenler[i*4 : i*4+2]
+        aksam = secilenler[i*4+2 : i*4+4]
+        veriler.append({
             "Şube": sube,
-            "Sabah Vardiyası (08:00 - 16:00)": ", ".join(sabah),
-            "Akşam Vardiyası (16:00 - 00:00)": ", ".join(aksam)
+            "Sabah (09:00 - 17:00)": ", ".join(sabah),
+            "Akşam (13:00 - 21:00)": ", ".join(aksam)
         })
+    return pd.DataFrame(veriler)
+
+# Ana Ekran
+col1, col2 = st.columns([1, 1])
+
+if st.button("🚀 Yeni Vardiya Planı Oluştur"):
+    df = plan_olustur()
     
-    return pd.DataFrame(plan)
+    if df is not None:
+        st.subheader("📊 Haftalık Dağılım")
+        # Tabloyu göster
+        st.table(df)
+        
+        # Excel İndirme Hazırlığı
+        output = BytesIO()
+        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+            df.to_excel(writer, index=False, sheet_name='Vardiya')
+        
+        st.download_button(
+            label="📥 Planı Excel Olarak İndir",
+            data=output.getvalue(),
+            file_name="vardiya_plani.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
 
-# Programı çalıştır ve sonucu göster
-vardiya_tablosu = vardiya_olustur(calisanlar, subeler)
-
-print("--- Haftalık Şube Vardiya Planı ---")
-print(vardiya_tablosu.to_string(index=False))
-
-# İstersen Excel'e de aktarabilirsin
-# vardiya_tablosu.to_excel("vardiya_plani.xlsx", index=False)
+st.sidebar.markdown("---")
+st.sidebar.info("İpucu: Personel sayısını artırarak rotasyonu daha adil hale getirebilirsiniz.")
