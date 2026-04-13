@@ -3,15 +3,14 @@ import pandas as pd
 import random
 import io
 
-st.set_page_config(page_title="Niğde Şubeleri Vardiya Paneli", layout="wide")
+st.set_page_config(page_title="Niğde Şubeleri Personel Yönetimi", layout="wide")
 
-st.title("📅 Şube Bazlı Haftalık Vardiya Sistemi")
-st.markdown("Hücrelerde sadece mesai saatleri görünür. Düzenlemek için hücreye çift tıklayın.")
+st.title("📅 Hafta Sonu İzin Olmayan Vardiya Sistemi")
+st.markdown("Hafta sonu herkes çalışır, personeller hafta içi (Pzt-Cum) birer gün izin kullanır.")
 
 # --- YAN MENÜ (AYARLAR) ---
 st.sidebar.header("🏢 Şube ve Personel Tanımlama")
 
-# Şube Ayarları
 s1_isim = st.sidebar.text_input("1. Şube Adı:", "Niğde 1")
 s1_personel = st.sidebar.text_area(f"{s1_isim} Personelleri:", "Ahmet, Ayşe, Mehmet, Fatma")
 
@@ -31,45 +30,52 @@ def vardiya_hesapla(p_listesi):
     
     matris = {p: {g: "" for g in gunler} for p in personeller}
     
-    # Her gün için tam 1 kişi izinli atama
-    for g_idx, gun in enumerate(gunler):
-        izinli_idx = g_idx % len(personeller)
-        izinli_p = personeller[izinli_idx]
-        matris[izinli_p][gun] = "İZİNLİ"
+    # 1. HAFTA İÇİ İZİN ATAMA (Pzt-Cum)
+    # Her personeli hafta içi rastgele farklı bir güne izinli atayalım
+    is_gunleri = ["Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma"]
+    random.shuffle(is_gunleri)
+    
+    for idx, p in enumerate(personeller):
+        # Eğer personel sayısı 4 ise, hafta içi 5 günden 4'ü izinle dolar. 
+        # Herkesin 1 gün izinli olmasını garanti eder.
+        izin_gunu = is_gunleri[idx % len(is_gunleri)]
+        matris[p][izin_gunu] = "İZİNLİ"
         
-        # Diğer çalışanlara SADECE mesai saatlerini ata (Şube adı silindi)
-        aktifler = [p for p in personeller if p != izinli_p]
+    # 2. MESAİ SAATLERİNİ DAĞITMA
+    for g in gunler:
+        aktifler = [p for p in personeller if matris[p][g] != "İZİNLİ"]
         random.shuffle(aktifler)
+        
         for m_idx, p in enumerate(aktifler):
-            # Sadece saati yazıyoruz
-            matris[p][gun] = mesai_saatleri[m_idx % len(mesai_saatleri)]
+            # Hafta sonu herkes aktif olduğu için mesai saatleri döngüsel atanır
+            matris[p][g] = mesai_saatleri[m_idx % len(mesai_saatleri)]
             
     return pd.DataFrame(matris).T
 
 # --- ANA EKRAN ---
-if st.sidebar.button("🚀 Vardiyaları Oluştur"):
+if st.sidebar.button("🚀 Hafta Sonu Çalışmalı Vardiya Oluştur"):
     st.session_state['s1_df'] = vardiya_hesapla(s1_personel)
     st.session_state['s2_df'] = vardiya_hesapla(s2_personel)
     st.session_state['s3_df'] = vardiya_hesapla(s3_personel)
-    st.success("Taslaklar oluşturuldu!")
+    st.success("Vardiyalar hafta sonu tam kadro olacak şekilde oluşturuldu!")
 
-# Tabloları Sekmelerde Göster
+# Sekmelerde Düzenlenebilir Tablolar
 if 's1_df' in st.session_state:
     tabs = st.tabs([f"📍 {s1_isim}", f"📍 {s2_isim}", f"📍 {s3_isim}"])
     
     with tabs[0]:
-        st.subheader(f"{s1_isim} Çizelgesi")
-        df1_final = st.data_editor(st.session_state['s1_df'], key="ed1", use_container_width=True)
+        st.subheader(f"{s1_isim} Haftalık Çizelge")
+        df1_final = st.data_editor(st.session_state['s1_df'], key="ed1_hs", use_container_width=True)
         
     with tabs[1]:
-        st.subheader(f"{s2_isim} Çizelgesi")
-        df2_final = st.data_editor(st.session_state['s2_df'], key="ed2", use_container_width=True)
+        st.subheader(f"{s2_isim} Haftalık Çizelge")
+        df2_final = st.data_editor(st.session_state['s2_df'], key="ed2_hs", use_container_width=True)
         
     with tabs[2]:
-        st.subheader(f"{s3_isim} Çizelgesi")
-        df3_final = st.data_editor(st.session_state['s3_df'], key="ed3", use_container_width=True)
+        st.subheader(f"{s3_isim} Haftalık Çizelge")
+        df3_final = st.data_editor(st.session_state['s3_df'], key="ed3_hs", use_container_width=True)
 
-    # Excel İndirme
+    # Excel Çıktısı
     buffer = io.BytesIO()
     with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
         df1_final.to_excel(writer, sheet_name=s1_isim[:31])
@@ -80,8 +86,8 @@ if 's1_df' in st.session_state:
     st.sidebar.download_button(
         label="📥 Güncel Listeyi Excel İndir",
         data=buffer.getvalue(),
-        file_name="nigde_vardiya_temiz_liste.xlsx",
+        file_name="nigde_haftasonu_mesai_listesi.xlsx",
         mime="application/vnd.ms-excel"
     )
 else:
-    st.info("Lütfen 'Vardiyaları Oluştur' butonuna basın.")
+    st.info("Lütfen yan menüden 'Vardiya Oluştur' butonuna basın.")
