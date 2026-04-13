@@ -4,27 +4,20 @@ import random
 import io
 import base64
 
-# --- SAYFA YAPILANDIRMASI ---
+# --- SAYFA AYARLARI ---
 st.set_page_config(page_title="Niğde Şube Vardiya Paneli", layout="wide")
 
 # --- YAZDIRMA (PDF) ÖZEL CSS ---
-# Yazdır butonuna basıldığında sadece tabloların görünmesini sağlar.
 st.markdown("""
     <style>
     @media print {
-        section[data-testid="stSidebar"], 
-        .stButton, 
-        header, 
-        .stTabs [data-baseweb="tab-list"],
-        footer {
+        section[data-testid="stSidebar"], .stButton, header, .stTabs [data-baseweb="tab-list"], footer {
             display: none !important;
         }
-        .main .block-container {
-            padding: 0 !important;
-            margin: 0 !important;
-        }
-        h2 { color: black !important; border-bottom: 2px solid #ccc; }
+        .main .block-container { padding: 0 !important; margin: 0 !important; }
     }
+    /* Butonları daha belirgin yapalım */
+    .stDownloadButton button { width: 100%; background-color: #f0f2f6; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -46,17 +39,11 @@ mesai_saatleri = ["05:30 - 14:00", "07:30 - 16:00", "13:30 - 22:00", "14:30 - 23
 
 def vardiya_olustur(p_listesi):
     personeller = [p.strip() for p in p_listesi.split(",") if p.strip()]
-    if len(personeller) < 4: return pd.DataFrame(columns=gunler)
-    
+    if len(personeller) < 1: return pd.DataFrame(columns=gunler)
     matris = {p: {g: "" for g in gunler} for p in personeller}
     is_gunleri = ["Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma"]
-    random.shuffle(is_gunleri)
-    
-    # Hafta içi izinler
     for idx, p in enumerate(personeller):
         matris[p][is_gunleri[idx % 5]] = "İZİNLİ"
-        
-    # Mesai dağıtımı (Hafta sonu tam kadro)
     for g in gunler:
         aktifler = [p for p in personeller if matris[p][g] != "İZİNLİ"]
         random.shuffle(aktifler)
@@ -64,13 +51,13 @@ def vardiya_olustur(p_listesi):
             matris[p][g] = mesai_saatleri[m_idx % 4]
     return pd.DataFrame(matris).T
 
-# --- TETİKLEYİCİ ---
+# --- HESAPLA BUTONU ---
 if st.sidebar.button("🚀 Vardiyaları Hesapla", use_container_width=True):
     st.session_state['s1'] = vardiya_olustur(s1_p)
     st.session_state['s2'] = vardiya_olustur(s2_p)
     st.session_state['s3'] = vardiya_olustur(s3_p)
 
-# --- TABLO GÖSTERİMİ ---
+# --- TABLOLAR VE İNDİRME BUTONLARI ---
 if 's1' in st.session_state:
     tabs = st.tabs([f"📍 {s1_isim}", f"📍 {s2_isim}", f"📍 {s3_isim}"])
     
@@ -81,11 +68,11 @@ if 's1' in st.session_state:
     with tabs[2]:
         df3 = st.data_editor(st.session_state['s3'], key="d3", use_container_width=True)
 
-    # --- İNDİRME BUTONLARI ---
+    # BUTONLARI BURAYA EKLEDİK (Görünür olması için)
     st.sidebar.markdown("---")
     st.sidebar.subheader("📥 Çıktı Al")
 
-    # 1. Excel İndirme
+    # 1. Excel Butonu
     buffer = io.BytesIO()
     with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
         df1.to_excel(writer, sheet_name=s1_isim[:30])
@@ -95,17 +82,14 @@ if 's1' in st.session_state:
     st.sidebar.download_button(
         label="📊 Excel Olarak İndir",
         data=buffer.getvalue(),
-        file_name="sube_vardiya_listesi.xlsx",
+        file_name="sube_vardiya.xlsx",
         mime="application/vnd.ms-excel",
         use_container_width=True
     )
 
-    # 2. PDF İndir / Yazdır (Sağ tık gerektirmez, doğrudan tetikler)
+    # 2. PDF Yazdır Butonu
     if st.sidebar.button("📄 PDF Olarak İndir / Yazdır", use_container_width=True):
-        # JavaScript ile otomatik yazdırma komutu gönderir
         st.components.v1.html("<script>window.print();</script>", height=0)
-    
-    st.sidebar.caption("💡 PDF Butonu: Otomatik olarak yazdırma penceresini açar.")
 
 else:
-    st.info("Lütfen personelleri tanımlayıp 'Vardiyaları Hesapla' butonuna basın.")
+    st.info("Lütfen sol menüden 'Vardiyaları Hesapla' butonuna basın. Butonlar hesaplamadan sonra görünecektir.")
