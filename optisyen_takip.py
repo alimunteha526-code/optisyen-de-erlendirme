@@ -33,18 +33,18 @@ kapanis_vardiyasi = "14:30 - 23:00"
 ara_vardiyalar = ["07:30 - 16:00", "13:30 - 22:00"]
 tum_saatler = [sabah_vardiyasi, kapanis_vardiyasi] + ara_vardiyalar
 
-st.title("👓 Niğde Furkan Baysak Şubeleri Shift Programı")
+st.title("🎂 Niğde Furkan Baysak Pastaneleri Shift Programı")
 st.write(f"**Haftalık Çizelge Dönemi:** {tarihli_gunler[0]} / {tarihli_gunler[-1]}")
 
 # --- YAN MENÜ ---
 st.sidebar.header("🏢 Şube ve Personel Yönetimi")
-s1_isim = st.sidebar.text_input("1. Şube Adı:", "Niğde Şube 1")
+s1_isim = st.sidebar.text_input("1. Şube Adı:", "Furkan Baysak Şube 1")
 s1_p = st.sidebar.text_area(f"{s1_isim} Ekibi:", "Ahmet, Ayşe, Mehmet, Fatma")
 
-s2_isim = st.sidebar.text_input("2. Şube Adı:", "Niğde Şube 2")
+s2_isim = st.sidebar.text_input("2. Şube Adı:", "Furkan Baysak Şube 2")
 s2_p = st.sidebar.text_area(f"{s2_isim} Ekibi:", "Can, Ece, Ali, Zeynep")
 
-s3_isim = st.sidebar.text_input("3. Şube Adı:", "Niğde Şube 3")
+s3_isim = st.sidebar.text_input("3. Şube Adı:", "Furkan Baysak Şube 3")
 s3_p = st.sidebar.text_area(f"{s3_isim} Ekibi:", "Burak, Deniz, Selin, Mert")
 
 # --- SHIFT MOTORU ---
@@ -55,6 +55,7 @@ def shift_olustur(p_listesi):
     matris = {p: {g: "" for g in tarihli_gunler} for p in personeller}
     sayac = {p: {v: 0 for v in tum_saatler} for p in personeller}
 
+    # 1. İzinleri ve Kritik Kuralları Yerleştir
     for idx, p in enumerate(personeller):
         izin_gun_idx = idx % 5 
         matris[p][tarihli_gunler[izin_gun_idx]] = "İZİNLİ"
@@ -71,6 +72,7 @@ def shift_olustur(p_listesi):
             matris[p][tarihli_gunler[sonraki_gun_idx]] = kapanis_vardiyasi
             sayac[p][kapanis_vardiyasi] += 1
 
+    # 2. Kalan Boşlukları Eşitlik İlkesiyle Doldur
     for g in tarihli_gunler:
         aktifler = [p for p in personeller if matris[p][g] == ""]
         random.shuffle(aktifler)
@@ -107,7 +109,7 @@ if 's1' in st.session_state:
     buffer = io.BytesIO()
     with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
         df1.to_excel(writer, sheet_name=s1_isim[:30]); df2.to_excel(writer, sheet_name=s2_isim[:30]); df3.to_excel(writer, sheet_name=s3_isim[:30])
-    st.sidebar.download_button(label="📊 Excel Dosyası Al", data=buffer.getvalue(), file_name="Furkan_Baysak_Shift.xlsx", use_container_width=True)
+    st.sidebar.download_button(label="📊 Excel Dosyası Al", data=buffer.getvalue(), file_name="Furkan_Baysak_Pastane_Shift.xlsx", use_container_width=True)
 
     # PDF / Yazdır
     if st.sidebar.button("📄 PDF / Yazıcıya Gönder", use_container_width=True):
