@@ -5,7 +5,7 @@ import io
 from datetime import datetime, timedelta
 
 # --- SAYFA AYARLARI ---
-st.set_page_config(page_title="Niğde Şube Vardiya Paneli", layout="wide")
+st.set_page_config(page_title="Furkan Baysak Shift Paneli", layout="wide")
 
 # --- YAZDIRMA (PDF) ÖZEL CSS ---
 st.markdown("""
@@ -15,6 +15,7 @@ st.markdown("""
             display: none !important;
         }
         .main .block-container { padding: 0 !important; margin: 0 !important; }
+        h1 { text-align: center; color: black !important; }
     }
     </style>
 """, unsafe_allow_html=True)
@@ -32,58 +33,52 @@ kapanis_vardiyasi = "14:30 - 23:00"
 ara_vardiyalar = ["07:30 - 16:00", "13:30 - 22:00"]
 tum_saatler = [sabah_vardiyasi, kapanis_vardiyasi] + ara_vardiyalar
 
-st.title("📅 Operasyonel Kurallı Vardiya Sistemi")
-st.success("✅ Kural Uygulandı: İzin öncesi 05:30, İzin dönüşü 14:30 sabitlemesi aktif.")
+st.title("👓 Niğde Furkan Baysak Şubeleri Shift Programı")
+st.write(f"**Haftalık Çizelge Dönemi:** {tarihli_gunler[0]} / {tarihli_gunler[-1]}")
 
 # --- YAN MENÜ ---
-st.sidebar.header("🏢 Şube ve Personel")
-s1_isim = st.sidebar.text_input("1. Şube Adı:", "Niğde 1")
-s1_p = st.sidebar.text_area(f"{s1_isim} Personelleri:", "Ahmet, Ayşe, Mehmet, Fatma")
+st.sidebar.header("🏢 Şube ve Personel Yönetimi")
+s1_isim = st.sidebar.text_input("1. Şube Adı:", "Niğde Şube 1")
+s1_p = st.sidebar.text_area(f"{s1_isim} Ekibi:", "Ahmet, Ayşe, Mehmet, Fatma")
 
-s2_isim = st.sidebar.text_input("2. Şube Adı:", "Niğde 2")
-s2_p = st.sidebar.text_area(f"{s2_isim} Personelleri:", "Can, Ece, Ali, Zeynep")
+s2_isim = st.sidebar.text_input("2. Şube Adı:", "Niğde Şube 2")
+s2_p = st.sidebar.text_area(f"{s2_isim} Ekibi:", "Can, Ece, Ali, Zeynep")
 
-s3_isim = st.sidebar.text_input("3. Şube Adı:", "Niğde 3")
-s3_p = st.sidebar.text_area(f"{s3_isim} Personelleri:", "Burak, Deniz, Selin, Mert")
+s3_isim = st.sidebar.text_input("3. Şube Adı:", "Niğde Şube 3")
+s3_p = st.sidebar.text_area(f"{s3_isim} Ekibi:", "Burak, Deniz, Selin, Mert")
 
-# --- AKILLI VARDİYA MOTORU ---
-def akilli_vardiya_olustur(p_listesi):
+# --- SHIFT MOTORU ---
+def shift_olustur(p_listesi):
     personeller = [p.strip() for p in p_listesi.split(",") if p.strip()]
     if not personeller: return pd.DataFrame(columns=tarihli_gunler)
     
     matris = {p: {g: "" for g in tarihli_gunler} for p in personeller}
     sayac = {p: {v: 0 for v in tum_saatler} for p in personeller}
 
-    # 1. İzinleri ve Özel Kuralları Belirle (Hafta içi izinler)
     for idx, p in enumerate(personeller):
-        izin_index = idx % 5 # Pazartesi-Cuma arası her birine farklı gün
-        matris[p][tarihli_gunler[izin_index]] = "İZİNLİ"
+        izin_gun_idx = idx % 5 
+        matris[p][tarihli_gunler[izin_gun_idx]] = "İZİNLİ"
         
-        # İzin öncesi kuralı (Pazar izinli değilse, izinden önceki gün sabah gel)
-        if izin_index > 0:
-            matris[p][tarihli_gunler[izin_index-1]] = sabah_vardiyasi
+        # KURAL: İzin Öncesi 05:30
+        onceki_gun_idx = (izin_gun_idx - 1) % 7
+        if matris[p][tarihli_gunler[onceki_gun_idx]] == "":
+            matris[p][tarihli_gunler[onceki_gun_idx]] = sabah_vardiyasi
             sayac[p][sabah_vardiyasi] += 1
             
-        # İzin dönüşü kuralı (İzinden sonraki gün kapanış gel)
-        if izin_index < 6:
-            matris[p][tarihli_gunler[izin_index+1]] = kapanis_vardiyasi
+        # KURAL: İzin Dönüşü 14:30
+        sonraki_gun_idx = (izin_gun_idx + 1) % 7
+        if matris[p][tarihli_gunler[sonraki_gun_idx]] == "":
+            matris[p][tarihli_gunler[sonraki_gun_idx]] = kapanis_vardiyasi
             sayac[p][kapanis_vardiyasi] += 1
 
-    # 2. Kalan Boşlukları Eşit Dağıt
     for g in tarihli_gunler:
         aktifler = [p for p in personeller if matris[p][g] == ""]
-        # O gün için zaten atanmış vardiyaları çıkar (Kuraldan gelenler)
-        atanmislar = [matris[p][g] for p in personeller if matris[p][g] not in ["", "İZİNLİ"]]
-        
-        kalan_vardiyalar = tum_saatler.copy()
-        for v in atanmislar:
-            if v in kalan_vardiyalar: kalan_vardiyalar.remove(v)
-            
         random.shuffle(aktifler)
+        atanmis_vardiyalar = [matris[p][g] for p in personeller if matris[p][g] not in ["", "İZİNLİ"]]
+        kalan_vardiyalar = [v for v in tum_saatler if v not in atanmis_vardiyalar] or tum_saatler.copy()
+
         for p in aktifler:
-            if not kalan_vardiyalar: break # Vardiya biterse (personel > vardiya durumu)
-            
-            # Personelin en az yaptığı vardiyayı seç
+            if not kalan_vardiyalar: break
             kalan_vardiyalar.sort(key=lambda v: sayac[p][v])
             secilen = kalan_vardiyalar.pop(0)
             matris[p][g] = secilen
@@ -91,31 +86,31 @@ def akilli_vardiya_olustur(p_listesi):
                 
     return pd.DataFrame(matris).T
 
-# --- HESAPLA ---
+# --- TETİKLEYİCİ ---
 st.sidebar.markdown("---")
-if st.sidebar.button("🚀 Kurallara Göre Hesapla", use_container_width=True):
-    st.session_state['s1'] = akilli_vardiya_olustur(s1_p)
-    st.session_state['s2'] = akilli_vardiya_olustur(s2_p)
-    st.session_state['s3'] = akilli_vardiya_olustur(s3_p)
+if st.sidebar.button("🚀 Shift Programını Hazırla", use_container_width=True):
+    st.session_state['s1'] = shift_olustur(s1_p)
+    st.session_state['s2'] = shift_olustur(s2_p)
+    st.session_state['s3'] = shift_olustur(s3_p)
 
 # --- GÖSTERİM VE ÇIKTI ---
 if 's1' in st.session_state:
     tabs = st.tabs([f"📍 {s1_isim}", f"📍 {s2_isim}", f"📍 {s3_isim}"])
-    with tabs[0]: df1 = st.data_editor(st.session_state['s1'], key="d1", use_container_width=True)
-    with tabs[1]: df2 = st.data_editor(st.session_state['s2'], key="d2", use_container_width=True)
-    with tabs[2]: df3 = st.data_editor(st.session_state['s3'], key="d3", use_container_width=True)
+    with tabs[0]: df1 = st.data_editor(st.session_state['s1'], key="f1", use_container_width=True)
+    with tabs[1]: df2 = st.data_editor(st.session_state['s2'], key="f2", use_container_width=True)
+    with tabs[2]: df3 = st.data_editor(st.session_state['s3'], key="f3", use_container_width=True)
 
     st.sidebar.markdown("---")
-    st.sidebar.subheader("📥 Çıktı Al")
+    st.sidebar.subheader("📥 Çıktı Seçenekleri")
     
     # Excel
     buffer = io.BytesIO()
     with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
         df1.to_excel(writer, sheet_name=s1_isim[:30]); df2.to_excel(writer, sheet_name=s2_isim[:30]); df3.to_excel(writer, sheet_name=s3_isim[:30])
-    st.sidebar.download_button(label="📊 Excel Olarak İndir", data=buffer.getvalue(), file_name="kural_vardiya.xlsx", use_container_width=True)
+    st.sidebar.download_button(label="📊 Excel Dosyası Al", data=buffer.getvalue(), file_name="Furkan_Baysak_Shift.xlsx", use_container_width=True)
 
-    # PDF
-    if st.sidebar.button("📄 PDF Olarak İndir / Yazdır", use_container_width=True):
+    # PDF / Yazdır
+    if st.sidebar.button("📄 PDF / Yazıcıya Gönder", use_container_width=True):
         st.components.v1.html("<script>window.print();</script>", height=0)
 else:
-    st.info("Lütfen sol menüdeki butona basarak kurallı dağıtımı başlatın.")
+    st.info("Lütfen personelleri girip sol menüdeki butona basarak shifti başlatın.")
