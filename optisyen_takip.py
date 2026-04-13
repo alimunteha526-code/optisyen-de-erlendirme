@@ -2,12 +2,11 @@ import streamlit as st
 import pandas as pd
 import random
 import io
-import base64
 
 # --- SAYFA AYARLARI ---
 st.set_page_config(page_title="Niğde Şube Vardiya Paneli", layout="wide")
 
-# --- YAZDIRMA (PDF) ÖZEL CSS ---
+# --- PDF YAZDIRMA İÇİN TEMİZLİK (CSS) ---
 st.markdown("""
     <style>
     @media print {
@@ -20,9 +19,8 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.title("📅 Profesyonel Şube Vardiya Paneli")
-st.info("Kural: İzin günlerinde kapanış vardiyası (14:30 - 23:00) otomatik atanır.")
 
-# --- YAN MENÜ ---
+# --- YAN MENÜ: GİRİŞLER ---
 st.sidebar.header("🏢 Şube ve Personel")
 s1_isim = st.sidebar.text_input("1. Şube Adı:", "Niğde 1")
 s1_p = st.sidebar.text_area(f"{s1_isim} Personelleri:", "Ahmet, Ayşe, Mehmet, Fatma")
@@ -37,39 +35,41 @@ gunler = ["Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi", 
 kapanis_saati = "14:30 - 23:00"
 diger_saatler = ["05:30 - 14:00", "07:30 - 16:00", "13:30 - 22:00"]
 
+# --- VARDİYA MOTORU ---
 def vardiya_olustur(p_listesi):
     personeller = [p.strip() for p in p_listesi.split(",") if p.strip()]
-    if len(personeller) < 1: return pd.DataFrame(columns=gunler)
+    if not personeller: return pd.DataFrame(columns=gunler)
     
     matris = {p: {g: "" for g in gunler} for p in personeller}
     is_gunleri = ["Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma"]
     
-    # 1. Hafta içi izinlerin atanması
+    # 1. Hafta içi her personelin 1 gün izinli olması
     for idx, p in enumerate(personeller):
         matris[p][is_gunleri[idx % 5]] = "İZİNLİ"
     
-    # 2. Mesai dağıtımı
+    # 2. Mesai dağıtımı (Hafta sonu herkes çalışır)
     for g in gunler:
         aktifler = [p for p in personeller if matris[p][g] != "İZİNLİ"]
         random.shuffle(aktifler)
         
         if len(aktifler) > 0:
-            # İzinli olan günlerde (veya her gün) bir kişiye kapanış vardiyasını sabitle
+            # En az 1 personelin kapanış (23:00) yapmasını garanti et
             matris[aktifler[0]][g] = kapanis_saati
             
-            # Kalan personellere diğer vardiyaları dağıt
+            # Kalan personellere diğer saatleri dağıt
             for m_idx, p in enumerate(aktifler[1:]):
                 matris[p][g] = diger_saatler[m_idx % len(diger_saatler)]
                 
     return pd.DataFrame(matris).T
 
-# --- HESAPLA BUTONU ---
+# --- HESAPLAMA BUTONU ---
+st.sidebar.markdown("---")
 if st.sidebar.button("🚀 Vardiyaları Hesapla", use_container_width=True):
     st.session_state['s1'] = vardiya_olustur(s1_p)
     st.session_state['s2'] = vardiya_olustur(s2_p)
     st.session_state['s3'] = vardiya_olustur(s3_p)
 
-# --- TABLOLAR VE ÇIKTI ---
+# --- TABLOLAR VE ÇIKTI BUTONLARI ---
 if 's1' in st.session_state:
     tabs = st.tabs([f"📍 {s1_isim}", f"📍 {s2_isim}", f"📍 {s3_isim}"])
     
@@ -80,10 +80,11 @@ if 's1' in st.session_state:
     with tabs[2]:
         df3 = st.data_editor(st.session_state['s3'], key="d3", use_container_width=True)
 
+    # İNDİRME BÖLÜMÜ (Sidebar'da en altta)
     st.sidebar.markdown("---")
     st.sidebar.subheader("📥 Çıktı Al")
 
-    # Excel
+    # 1. Excel İndir
     buffer = io.BytesIO()
     with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
         df1.to_excel(writer, sheet_name=s1_isim[:30])
@@ -91,15 +92,18 @@ if 's1' in st.session_state:
         df3.to_excel(writer, sheet_name=s3_isim[:30])
     
     st.sidebar.download_button(
-        label="📊 Excel Olarak İndir",
+        label="📊 Excel Dosyasını İndir",
         data=buffer.getvalue(),
-        file_name="sube_vardiya.xlsx",
+        file_name="sube_vardiya_listesi.xlsx",
         mime="application/vnd.ms-excel",
         use_container_width=True
     )
 
-    # PDF
+    # 2. PDF Yazdır (Otomatik tetikleyici)
     if st.sidebar.button("📄 PDF Olarak İndir / Yazdır", use_container_width=True):
         st.components.v1.html("<script>window.print();</script>", height=0)
+    
+    st.sidebar.caption("💡 PDF için: Açılan pencerede 'PDF Kaydet' seçin.")
+
 else:
-    st.info("Lütfen sol menüden 'Vardiyaları Hesapla' butonuna basın.")
+    st.info("Personel isimlerini kontrol edin ve sol menüdeki 'Vardiyaları Hesapla' butonuna basın.")
