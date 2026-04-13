@@ -27,12 +27,13 @@ def haftalik_tarihleri_getir():
     return [f"{gun_isimleri[i]} ({(pazartesi + timedelta(days=i)).strftime('%d.%m.%Y')})" for i in range(7)]
 
 tarihli_gunler = haftalik_tarihleri_getir()
-kapanis_saati = "14:30 - 23:00"
-diger_saatler = ["05:30 - 14:00", "07:30 - 16:00", "13:30 - 22:00"]
-tum_vardiyalar = [kapanis_saati] + diger_saatler
+sabah_vardiyasi = "05:30 - 14:00"
+kapanis_vardiyasi = "14:30 - 23:00"
+ara_vardiyalar = ["07:30 - 16:00", "13:30 - 22:00"]
+tum_saatler = [sabah_vardiyasi, kapanis_vardiyasi] + ara_vardiyalar
 
-st.title("📅 Adil Vardiya Dağıtım Sistemi")
-st.info("Sistem, her personelin tüm vardiya saatlerinden (sabah, ara, akşam) hafta boyunca eşit sayıda almasını sağlar.")
+st.title("📅 Operasyonel Kurallı Vardiya Sistemi")
+st.success("✅ Kural Uygulandı: İzin öncesi 05:30, İzin dönüşü 14:30 sabitlemesi aktif.")
 
 # --- YAN MENÜ ---
 st.sidebar.header("🏢 Şube ve Personel")
@@ -45,43 +46,57 @@ s2_p = st.sidebar.text_area(f"{s2_isim} Personelleri:", "Can, Ece, Ali, Zeynep")
 s3_isim = st.sidebar.text_input("3. Şube Adı:", "Niğde 3")
 s3_p = st.sidebar.text_area(f"{s3_isim} Personelleri:", "Burak, Deniz, Selin, Mert")
 
-# --- ADİL VARDİYA MOTORU ---
-def adil_vardiya_olustur(p_listesi):
+# --- AKILLI VARDİYA MOTORU ---
+def akilli_vardiya_olustur(p_listesi):
     personeller = [p.strip() for p in p_listesi.split(",") if p.strip()]
     if not personeller: return pd.DataFrame(columns=tarihli_gunler)
     
     matris = {p: {g: "" for g in tarihli_gunler} for p in personeller}
-    
-    # Hafta içi izin ataması
-    is_gunleri = tarihli_gunler[:5]
+    sayac = {p: {v: 0 for v in tum_saatler} for p in personeller}
+
+    # 1. İzinleri ve Özel Kuralları Belirle (Hafta içi izinler)
     for idx, p in enumerate(personeller):
-        matris[p][is_gunleri[idx % 5]] = "İZİNLİ"
-
-    # Her personel için vardiya kullanım sayacı
-    # Örnek: {'Ahmet': {'14:30 - 23:00': 0, ...}}
-    sayac = {p: {v: 0 for v in tum_vardiyalar} for p in personeller}
-
-    for g in tarihli_gunler:
-        aktifler = [p for p in personeller if matris[p][g] != "İZİNLİ"]
-        gunluk_vardiyalar = tum_vardiyalar.copy()
+        izin_index = idx % 5 # Pazartesi-Cuma arası her birine farklı gün
+        matris[p][tarihli_gunler[izin_index]] = "İZİNLİ"
         
-        # O gün çalışacak her personel için en az kullanılan vardiyayı seçmeye çalış
-        random.shuffle(aktifler) 
+        # İzin öncesi kuralı (Pazar izinli değilse, izinden önceki gün sabah gel)
+        if izin_index > 0:
+            matris[p][tarihli_gunler[izin_index-1]] = sabah_vardiyasi
+            sayac[p][sabah_vardiyasi] += 1
+            
+        # İzin dönüşü kuralı (İzinden sonraki gün kapanış gel)
+        if izin_index < 6:
+            matris[p][tarihli_gunler[izin_index+1]] = kapanis_vardiyasi
+            sayac[p][kapanis_vardiyasi] += 1
+
+    # 2. Kalan Boşlukları Eşit Dağıt
+    for g in tarihli_gunler:
+        aktifler = [p for p in personeller if matris[p][g] == ""]
+        # O gün için zaten atanmış vardiyaları çıkar (Kuraldan gelenler)
+        atanmislar = [matris[p][g] for p in personeller if matris[p][g] not in ["", "İZİNLİ"]]
+        
+        kalan_vardiyalar = tum_saatler.copy()
+        for v in atanmislar:
+            if v in kalan_vardiyalar: kalan_vardiyalar.remove(v)
+            
+        random.shuffle(aktifler)
         for p in aktifler:
-            # Mevcut vardiyaları, personelin daha önce kaç kez yaptığına göre sırala
-            gunluk_vardiyalar.sort(key=lambda v: sayac[p][v])
-            secilen_vardiya = gunluk_vardiyalar.pop(0)
-            matris[p][g] = secilen_vardiya
-            sayac[p][secilen_vardiya] += 1
+            if not kalan_vardiyalar: break # Vardiya biterse (personel > vardiya durumu)
+            
+            # Personelin en az yaptığı vardiyayı seç
+            kalan_vardiyalar.sort(key=lambda v: sayac[p][v])
+            secilen = kalan_vardiyalar.pop(0)
+            matris[p][g] = secilen
+            sayac[p][secilen] += 1
                 
     return pd.DataFrame(matris).T
 
 # --- HESAPLA ---
 st.sidebar.markdown("---")
-if st.sidebar.button("🚀 Eşit Dağılımlı Hesapla", use_container_width=True):
-    st.session_state['s1'] = adil_vardiya_olustur(s1_p)
-    st.session_state['s2'] = adil_vardiya_olustur(s2_p)
-    st.session_state['s3'] = adil_vardiya_olustur(s3_p)
+if st.sidebar.button("🚀 Kurallara Göre Hesapla", use_container_width=True):
+    st.session_state['s1'] = akilli_vardiya_olustur(s1_p)
+    st.session_state['s2'] = akilli_vardiya_olustur(s2_p)
+    st.session_state['s3'] = akilli_vardiya_olustur(s3_p)
 
 # --- GÖSTERİM VE ÇIKTI ---
 if 's1' in st.session_state:
@@ -92,19 +107,15 @@ if 's1' in st.session_state:
 
     st.sidebar.markdown("---")
     st.sidebar.subheader("📥 Çıktı Al")
-
+    
     # Excel
     buffer = io.BytesIO()
     with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
-        df1.to_excel(writer, sheet_name=s1_isim[:30])
-        df2.to_excel(writer, sheet_name=s2_isim[:30])
-        df3.to_excel(writer, sheet_name=s3_isim[:30])
-    
-    st.sidebar.download_button(label="📊 Excel Olarak İndir", data=buffer.getvalue(), 
-                               file_name="esit_vardiya_listesi.xlsx", mime="application/vnd.ms-excel", use_container_width=True)
+        df1.to_excel(writer, sheet_name=s1_isim[:30]); df2.to_excel(writer, sheet_name=s2_isim[:30]); df3.to_excel(writer, sheet_name=s3_isim[:30])
+    st.sidebar.download_button(label="📊 Excel Olarak İndir", data=buffer.getvalue(), file_name="kural_vardiya.xlsx", use_container_width=True)
 
     # PDF
     if st.sidebar.button("📄 PDF Olarak İndir / Yazdır", use_container_width=True):
         st.components.v1.html("<script>window.print();</script>", height=0)
 else:
-    st.info("Lütfen sol menüdeki butona basarak adil dağıtımı başlatın.")
+    st.info("Lütfen sol menüdeki butona basarak kurallı dağıtımı başlatın.")
