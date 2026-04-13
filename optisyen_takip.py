@@ -3,93 +3,89 @@ import pandas as pd
 import random
 import io
 
-# Sayfa Genişliği
-st.set_page_config(page_title="Niğde Şube Vardiya Paneli", layout="wide")
+st.set_page_config(page_title="Niğde Şubeleri Personel Yönetimi", layout="wide")
 
-st.title("📅 Haftalık Şube Vardiya Çizelgesi")
+st.title("📅 Şube Bazlı Haftalık Vardiya Sistemi")
 
 # --- YAN MENÜ (AYARLAR) ---
-st.sidebar.header("⚙️ Ayarlar")
+st.sidebar.header("🏢 Şube ve Personel Tanımlama")
 
-# Şube İsimlerini Düzenleme
-s1_isim = st.sidebar.text_input("1. Şube İsmi:", "Niğde 1")
-s2_isim = st.sidebar.text_input("2. Şube İsmi:", "Niğde 2")
-s3_isim = st.sidebar.text_input("3. Şube İsmi:", "Niğde 3")
-sube_listesi = [s1_isim, s2_isim, s3_isim]
+# Şube 1 Ayarları
+s1_isim = st.sidebar.text_input("1. Şube Adı:", "Niğde 1")
+s1_personel = st.sidebar.text_area(f"{s1_isim} Personelleri (Virgülle ayırın):", "Ahmet, Ayşe, Mehmet, Fatma")
 
-# Personel İsimlerini Düzenleme
-personel_input = st.sidebar.text_area("Personel İsimleri (4 kişi):", "Ahmet, Ayşe, Mehmet, Fatma")
-personeller = [p.strip() for p in personel_input.split(",") if p.strip()][:4]
+# Şube 2 Ayarları
+s2_isim = st.sidebar.text_input("2. Şube Adı:", "Niğde 2")
+s2_personel = st.sidebar.text_area(f"{s2_isim} Personelleri (Virgülle ayırın):", "Can, Ece, Ali, Zeynep")
+
+# Şube 3 Ayarları
+s3_isim = st.sidebar.text_input("3. Şube Adı:", "Niğde 3")
+s3_personel = st.sidebar.text_area(f"{s3_isim} Personelleri (Virgülle ayırın):", "Burak, Deniz, Selin, Mert")
 
 gunler = ["Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi", "Pazar"]
 mesai_saatleri = ["05:30 - 14:00", "07:30 - 16:00", "13:30 - 22:00", "14:30 - 23:00"]
 
-if len(personeller) < 4:
-    st.error("Lütfen tam olarak 4 personel giriniz.")
-else:
-    if st.sidebar.button("🔄 Yeni Vardiya Oluştur"):
-        # Haftalık Veri Matrisi
-        haftalik_matris = {p: {g: "" for g in gunler} for p in personeller}
+def vardiya_hesapla(p_listesi, s_adi):
+    # Temiz liste oluştur
+    personeller = [p.strip() for p in p_listesi.split(",") if p.strip()]
+    if len(personeller) == 0:
+        return None
+    
+    matris = {p: {g: "" for g in gunler} for p in personeller}
+    
+    # Hafta içi izin atama (Herkes 1 gün izinli)
+    is_gunleri = gunler[:5]
+    for p in personeller:
+        izin_gunu = random.choice(is_gunleri)
+        matris[p][izin_gunu] = "İZİNLİ"
         
-        # 1. Hafta İçi İzin Atama (Pzt-Cum arası her personele 1 gün)
-        is_gunleri = gunler[:5]
-        random.shuffle(is_gunleri)
-        for i, p in enumerate(personeller):
-            haftalik_matris[p][is_gunleri[i]] = "İZİNLİ"
-
-        # 2. Şubelere Dağıtım Mantığı (Görseldeki gibi)
-        for g in gunler:
-            aktif_personeller = [p for p in personeller if haftalik_matris[p][g] != "İZİNLİ"]
-            random.shuffle(aktif_personeller)
+    # Vardiya saatlerini dağıt
+    for g in gunler:
+        aktifler = [p for p in personeller if matris[p][g] != "İZİNLİ"]
+        random.shuffle(aktifler)
+        for idx, p in enumerate(aktifler):
+            # Saatleri döngüsel ata (05:30, 07:30 vb.)
+            saat = mesai_saatleri[idx % len(mesai_saatleri)]
+            matris[p][g] = f"{s_adi} ({saat})"
             
-            for idx, p in enumerate(aktif_personeller):
-                # 4. kişi varsa 1. şubeye destek gider (veya döngüsel dağılır)
-                s_idx = idx if idx < 3 else 0 
-                haftalik_matris[p][g] = f"{sube_listesi[s_idx]} ({mesai_saatleri[idx]})"
+    return pd.DataFrame(matris).T
 
-        # Session State'e kaydet (Sayfa yenilendiğinde verinin kaybolmaması için)
-        st.session_state['vardiya_verisi'] = haftalik_matris
+# --- ANA EKRAN ---
+if st.sidebar.button("🚀 Tüm Şubelerin Vardiyasını Oluştur"):
+    st.session_state['s1_df'] = vardiya_hesapla(s1_personel, s1_isim)
+    st.session_state['s2_df'] = vardiya_hesapla(s2_personel, s2_isim)
+    st.session_state['s3_df'] = vardiya_hesapla(s3_personel, s3_isim)
+    st.success("Tüm şubeler için vardiyalar başarıyla oluşturuldu!")
 
-    # Veri varsa göster
-    if 'vardiya_verisi' in st.session_state:
-        matris = st.session_state['vardiya_verisi']
+# Tabloları Sekmelerde Göster
+if 's1_df' in st.session_state:
+    tabs = st.tabs([f"📍 {s1_isim}", f"📍 {s2_isim}", f"📍 {s3_isim}"])
+    
+    with tabs[0]:
+        st.subheader(f"{s1_isim} Personel Bazlı Çizelge")
+        st.table(st.session_state['s1_df'])
         
-        # Sekmeler
-        sekme_isimleri = ["📊 Genel Tablo"] + [f"📍 {s}" for s in sube_listesi]
-        tabs = st.tabs(sekme_isimleri)
-
-        # TAB 1: GENEL TABLO (Görseldeki format)
-        with tabs[0]:
-            st.subheader("Tüm Personel Haftalık Dağılımı")
-            df_genel = pd.DataFrame(matris).T
-            st.table(df_genel)
-
-        # ŞUBE ÖZEL SEKMELERİ
-        for i, sube in enumerate(sube_listesi):
-            with tabs[i+1]:
-                st.subheader(f"{sube} Haftalık Listesi")
-                sube_ozel_liste = []
-                for g in gunler:
-                    gorevli_bilgisi = []
-                    for p in personeller:
-                        if sube in matris[p][g]:
-                            saat = matris[p][g].split("(")[1].replace(")", "")
-                            gorevli_bilgisi.append(f"{p} ({saat})")
-                    
-                    sube_ozel_liste.append({
-                        "Gün": g,
-                        "Görevli": " / ".join(gorevli_bilgisi) if gorevli_bilgisi else "PERSONEL YOK"
-                    })
-                st.table(pd.DataFrame(sube_ozel_liste))
-
-        # Excel İndirme
-        buffer = io.BytesIO()
-        with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
-            pd.DataFrame(matris).T.to_excel(writer, sheet_name='Genel_Liste')
+    with tabs[1]:
+        st.subheader(f"{s2_isim} Personel Bazlı Çizelge")
+        st.table(st.session_state['s2_df'])
         
-        st.sidebar.download_button(
-            label="📥 Excel Olarak İndir",
-            data=buffer.getvalue(),
-            file_name="sube_vardiya_listesi.xlsx",
-            mime="application/vnd.ms-excel"
-        )
+    with tabs[2]:
+        st.subheader(f"{s3_isim} Personel Bazlı Çizelge")
+        st.table(st.session_state['s3_df'])
+
+    # Excel İndirme
+    buffer = io.BytesIO()
+    with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
+        st.session_state['s1_df'].to_excel(writer, sheet_name=s1_isim[:30])
+        st.session_state['s2_df'].to_excel(writer, sheet_name=s2_isim[:30])
+        st.session_state['s3_df'].to_excel(writer, sheet_name=s3_isim[:30])
+    
+    st.sidebar.markdown("---")
+    st.sidebar.download_button(
+        label="📥 Tüm Şubeleri Excel İndir",
+        data=buffer.getvalue(),
+        file_name="sube_bazli_vardiya.xlsx",
+        mime="application/vnd.ms-excel"
+    )
+else:
+    st.info("Lütfen yan menüden şube isimlerini ve personellerini girip 'Vardiya Oluştur' butonuna basın.")
