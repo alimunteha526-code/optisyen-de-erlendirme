@@ -38,13 +38,13 @@ st.write(f"**Haftalık Çizelge Dönemi:** {tarihli_gunler[0]} / {tarihli_gunler
 
 # --- YAN MENÜ ---
 st.sidebar.header("🏢 Şube ve Personel Yönetimi")
-s1_isim = st.sidebar.text_input("1. Şube Adı:", "Furkan Baysak Şube 1")
+s1_isim = st.sidebar.text_input("1. Şube Adı:", "NİĞDE 1")
 s1_p = st.sidebar.text_area(f"{s1_isim} Ekibi:", "Ahmet, Ayşe, Mehmet, Fatma")
 
-s2_isim = st.sidebar.text_input("2. Şube Adı:", "Furkan Baysak Şube 2")
+s2_isim = st.sidebar.text_input("2. Şube Adı:", "NİĞDE 2")
 s2_p = st.sidebar.text_area(f"{s2_isim} Ekibi:", "Can, Ece, Ali, Zeynep")
 
-s3_isim = st.sidebar.text_input("3. Şube Adı:", "Furkan Baysak Şube 3")
+s3_isim = st.sidebar.text_input("3. Şube Adı:", "NİĞDE 3")
 s3_p = st.sidebar.text_area(f"{s3_isim} Ekibi:", "Burak, Deniz, Selin, Mert")
 
 # --- SHIFT MOTORU ---
