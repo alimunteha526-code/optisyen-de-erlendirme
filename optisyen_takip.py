@@ -3,91 +3,69 @@ import pandas as pd
 import random
 import io
 
-# Sayfa Ayarları
-st.set_page_config(page_title="Niğde Şubeleri Vardiya Paneli", layout="wide")
+st.set_page_config(page_title="Niğde Vardiya Paneli", layout="wide")
 
-st.title("🏪 Niğde Şubeleri Haftalık Vardiya Planlayıcı")
-st.markdown("Personel listesini güncelleyip 'Vardiya Oluştur' butonuna basınız.")
+st.title("📄 Niğde Şubeleri Haftalık Tek Liste")
+st.markdown("4 Personel için 8.5 saat sınırına uygun haftalık plan.")
 
-# Yan Menü (Ayarlar)
-st.sidebar.header("⚙️ Planlama Ayarları")
-
-# Şube isimleri sabitlendi
-sube_isimleri = ["Niğde 1", "Niğde 2", "Niğde 3"]
+# Ayarlar
+subeler = ["Niğde 1", "Niğde 2", "Niğde 3"]
 gunler = ["Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi", "Pazar"]
+saatler = ["05:30", "07:30", "13:30", "14:30"]
 
-# Personel giriş alanı
-varsayilan_personel = "Ahmet, Ayşe, Mehmet, Fatma, Can, Ece, Ali, Zeynep, Burak, Deniz, Selin, Mert, Kerem, Aslı, Murat"
-personel_input = st.sidebar.text_area("Personel Listesi (Virgülle ayırarak yazın):", varsayilan_personel, height=200)
+# Personel Listesi (4 Kişi)
+st.sidebar.header("Personel Yönetimi")
+personel_input = st.sidebar.text_area("Personel İsimleri (4 kişi):", "Ahmet, Ayşe, Mehmet, Fatma")
+personeller = [p.strip() for p in personel_input.split(",") if p.strip()][:4]
 
-personel_listesi = [p.strip() for p in personel_input.split(",") if p.strip()]
-
-if st.sidebar.button("🗓️ Haftalık Vardiyayı Oluştur"):
-    if len(personel_listesi) < 6:
-        st.error("⚠️ Hata: 3 şube için en az 6 personel girilmelidir.")
-    else:
-        haftalik_kayitlar = []
+if len(personeller) < 4:
+    st.error("Lütfen en az 4 personel ismi giriniz.")
+else:
+    if st.button("🗓️ Haftalık Tabloyu Oluştur"):
+        data = []
         
-        # Günlere göre sekmeler oluştur
-        tabs = st.tabs(gunler)
+        for gun in gunler:
+            # Her gün için personelleri karıştır
+            gunluk_personel = personeller.copy()
+            random.shuffle(gunluk_personel)
+            
+            # 4 personel olduğu için dağılım mantığı:
+            # P1 -> Niğde 1 (Sabah), P2 -> Niğde 2 (Sabah), P3 -> Niğde 3 (Öğle), P4 -> Gezici/Yedek
+            plan = {
+                "Gün": gun,
+                "Niğde 1 (05:30 - 14:00)": gunluk_personel[0],
+                "Niğde 2 (07:30 - 16:00)": gunluk_personel[1],
+                "Niğde 3 (13:30 - 22:00)": gunluk_personel[2],
+                "Yedek/İzinli (14:30 - 23:00)": gunluk_personel[3]
+            }
+            data.append(plan)
         
-        for gun_index, gun in enumerate(gunler):
-            with tabs[gun_index]:
-                st.subheader(f"📅 {gun} Günü Planı")
-                
-                # Her gün için listeyi karıştır (Adil dağılım)
-                gunluk_liste = personel_listesi.copy()
-                random.shuffle(gunluk_liste)
-                
-                # Personeli 3 şubeye paylaştır
-                pay = len(gunluk_liste) // 3
-                
-                gunluk_ozet = []
-                
-                for i in range(3):
-                    bas = i * pay
-                    son = (i + 1) * pay if i < 2 else len(gunluk_liste)
-                    sube_personeli = gunluk_liste[bas:son]
-                    
-                    # Şube personelini Sabah/Akşam olarak böl
-                    orta = len(sube_personeli) // 2
-                    sabah = sube_personeli[:orta]
-                    aksam = sube_personeli[orta:]
-                    
-                    sabah_str = ", ".join(sabah) if sabah else "Boş"
-                    aksam_str = ", ".join(aksam) if aksam else "Boş"
-                    
-                    gunluk_ozet.append({
-                        "Şube Adı": sube_isimleri[i],
-                        "Sabah (09:00 - 17:00)": sabah_str,
-                        "Akşam (14:00 - 22:00)": aksam_str
-                    })
-                    
-                    # Excel için veriyi sakla
-                    haftalik_kayitlar.append([gun, sube_isimleri[i], "Sabah", sabah_str])
-                    haftalik_kayitlar.append([gun, sube_isimleri[i], "Akşam", aksam_str])
-                
-                # Tabloyu ekranda göster
-                st.table(pd.DataFrame(gunluk_ozet))
+        df = pd.DataFrame(data)
+        
+        # Tek bir büyük tablo olarak göster
+        st.subheader("📋 Haftalık Çalışma Çizelgesi")
+        st.table(df)
+        
+        st.info("💡 Not: Mesai süreleri günlük 8.5 saati geçmeyecek şekilde (yarım saat mola dahil) ayarlanmıştır.")
 
-        # Excel İndirme İşlemi
-        df_export = pd.DataFrame(haftalik_kayitlar, columns=["Gün", "Şube", "Vardiya", "Personel"])
+        # Excel Çıktısı
         buffer = io.BytesIO()
         with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
-            df_export.to_excel(writer, index=False, sheet_name='Nigde_Vardiya_Plani')
-        
-        st.sidebar.markdown("---")
-        st.sidebar.download_button(
-            label="📥 Haftalık Planı Excel Olarak İndir",
+            df.to_excel(writer, index=False, sheet_name='Haftalik_Plan')
+            
+        st.download_button(
+            label="📥 Listeyi Excel (Yazdırılabilir) Olarak İndir",
             data=buffer.getvalue(),
-            file_name="nigde_subeleri_vardiya.xlsx",
+            file_name="nigde_haftalik_vardiya.xlsx",
             mime="application/vnd.ms-excel"
         )
-        st.sidebar.success("✅ Plan başarıyla hazırlandı.")
 
-else:
-    st.info("Sol taraftaki ayarları kontrol edip butona basarak haftalık planı oluşturabilirsiniz.")
-
-# Alt Bilgi
-st.markdown("---")
-st.caption("Not: Sistem her gün için personelleri rastgele dağıtır. Eğer özel bir gün için değişim yapmak isterseniz butona tekrar basarak listeyi yeniden karıştırabilirsiniz.")
+st.markdown("""
+---
+**Vardiya Saatleri ve Kurallar:**
+* **05:30 Giriş:** 14:00 Çıkış (8.5 Saat)
+* **07:30 Giriş:** 16:00 Çıkış (8.5 Saat)
+* **13:30 Giriş:** 22:00 Çıkış (8.5 Saat)
+* **14:30 Giriş:** 23:00 Çıkış (8.5 Saat)
+* *Her personel günde sadece bir şubede görev alır.*
+""")
