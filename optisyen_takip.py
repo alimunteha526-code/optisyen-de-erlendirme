@@ -16,12 +16,11 @@ st.markdown("""
         }
         .main .block-container { padding: 0 !important; margin: 0 !important; }
     }
-    /* Butonları daha belirgin yapalım */
-    .stDownloadButton button { width: 100%; background-color: #f0f2f6; }
     </style>
 """, unsafe_allow_html=True)
 
 st.title("📅 Profesyonel Şube Vardiya Paneli")
+st.info("Kural: İzin günlerinde kapanış vardiyası (14:30 - 23:00) otomatik atanır.")
 
 # --- YAN MENÜ ---
 st.sidebar.header("🏢 Şube ve Personel")
@@ -35,20 +34,33 @@ s3_isim = st.sidebar.text_input("3. Şube Adı:", "Niğde 3")
 s3_p = st.sidebar.text_area(f"{s3_isim} Personelleri:", "Burak, Deniz, Selin, Mert")
 
 gunler = ["Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi", "Pazar"]
-mesai_saatleri = ["05:30 - 14:00", "07:30 - 16:00", "13:30 - 22:00", "14:30 - 23:00"]
+kapanis_saati = "14:30 - 23:00"
+diger_saatler = ["05:30 - 14:00", "07:30 - 16:00", "13:30 - 22:00"]
 
 def vardiya_olustur(p_listesi):
     personeller = [p.strip() for p in p_listesi.split(",") if p.strip()]
     if len(personeller) < 1: return pd.DataFrame(columns=gunler)
+    
     matris = {p: {g: "" for g in gunler} for p in personeller}
     is_gunleri = ["Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma"]
+    
+    # 1. Hafta içi izinlerin atanması
     for idx, p in enumerate(personeller):
         matris[p][is_gunleri[idx % 5]] = "İZİNLİ"
+    
+    # 2. Mesai dağıtımı
     for g in gunler:
         aktifler = [p for p in personeller if matris[p][g] != "İZİNLİ"]
         random.shuffle(aktifler)
-        for m_idx, p in enumerate(aktifler):
-            matris[p][g] = mesai_saatleri[m_idx % 4]
+        
+        if len(aktifler) > 0:
+            # İzinli olan günlerde (veya her gün) bir kişiye kapanış vardiyasını sabitle
+            matris[aktifler[0]][g] = kapanis_saati
+            
+            # Kalan personellere diğer vardiyaları dağıt
+            for m_idx, p in enumerate(aktifler[1:]):
+                matris[p][g] = diger_saatler[m_idx % len(diger_saatler)]
+                
     return pd.DataFrame(matris).T
 
 # --- HESAPLA BUTONU ---
@@ -57,7 +69,7 @@ if st.sidebar.button("🚀 Vardiyaları Hesapla", use_container_width=True):
     st.session_state['s2'] = vardiya_olustur(s2_p)
     st.session_state['s3'] = vardiya_olustur(s3_p)
 
-# --- TABLOLAR VE İNDİRME BUTONLARI ---
+# --- TABLOLAR VE ÇIKTI ---
 if 's1' in st.session_state:
     tabs = st.tabs([f"📍 {s1_isim}", f"📍 {s2_isim}", f"📍 {s3_isim}"])
     
@@ -68,11 +80,10 @@ if 's1' in st.session_state:
     with tabs[2]:
         df3 = st.data_editor(st.session_state['s3'], key="d3", use_container_width=True)
 
-    # BUTONLARI BURAYA EKLEDİK (Görünür olması için)
     st.sidebar.markdown("---")
     st.sidebar.subheader("📥 Çıktı Al")
 
-    # 1. Excel Butonu
+    # Excel
     buffer = io.BytesIO()
     with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
         df1.to_excel(writer, sheet_name=s1_isim[:30])
@@ -87,9 +98,8 @@ if 's1' in st.session_state:
         use_container_width=True
     )
 
-    # 2. PDF Yazdır Butonu
+    # PDF
     if st.sidebar.button("📄 PDF Olarak İndir / Yazdır", use_container_width=True):
         st.components.v1.html("<script>window.print();</script>", height=0)
-
 else:
-    st.info("Lütfen sol menüden 'Vardiyaları Hesapla' butonuna basın. Butonlar hesaplamadan sonra görünecektir.")
+    st.info("Lütfen sol menüden 'Vardiyaları Hesapla' butonuna basın.")
