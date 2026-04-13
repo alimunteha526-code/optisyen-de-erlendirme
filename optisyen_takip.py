@@ -1,91 +1,100 @@
 import streamlit as st
 import pandas as pd
 import random
-import io
+from st_aggrid import AgGrid, GridOptionsBuilder # pip install st-aggrid
+from weasyprint import HTML # PDF için
+import base64
 
-st.set_page_config(page_title="Niğde Şubeleri Personel Yönetimi", layout="wide")
+st.set_page_config(page_title="Niğde Şube Vardiya Paneli", layout="wide")
 
-st.title("📅 Şube Bazlı Haftalık Vardiya Sistemi")
+st.title("📅 Gelişmiş Şube Vardiya Paneli")
+st.markdown("Her gün 1 kişi izinli olacak şekilde ayarlanmıştır. Tablo üzerinde değişiklik yapabilirsiniz.")
 
-# --- YAN MENÜ (AYARLAR) ---
-st.sidebar.header("🏢 Şube ve Personel Tanımlama")
-
-# Şube 1 Ayarları
+# --- YAN MENÜ ---
+st.sidebar.header("🏢 Şube Ayarları")
 s1_isim = st.sidebar.text_input("1. Şube Adı:", "Niğde 1")
-s1_personel = st.sidebar.text_area(f"{s1_isim} Personelleri (Virgülle ayırın):", "Ahmet, Ayşe, Mehmet, Fatma")
-
-# Şube 2 Ayarları
-s2_isim = st.sidebar.text_input("2. Şube Adı:", "Niğde 2")
-s2_personel = st.sidebar.text_area(f"{s2_isim} Personelleri (Virgülle ayırın):", "Can, Ece, Ali, Zeynep")
-
-# Şube 3 Ayarları
-s3_isim = st.sidebar.text_input("3. Şube Adı:", "Niğde 3")
-s3_personel = st.sidebar.text_area(f"{s3_isim} Personelleri (Virgülle ayırın):", "Burak, Deniz, Selin, Mert")
+s1_personel = st.sidebar.text_area(f"{s1_isim} Personelleri (4 kişi önerilir):", "Ahmet, Ayşe, Mehmet, Fatma")
 
 gunler = ["Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi", "Pazar"]
 mesai_saatleri = ["05:30 - 14:00", "07:30 - 16:00", "13:30 - 22:00", "14:30 - 23:00"]
 
-def vardiya_hesapla(p_listesi, s_adi):
-    # Temiz liste oluştur
+def vardiya_olustur(p_listesi, s_adi):
     personeller = [p.strip() for p in p_listesi.split(",") if p.strip()]
-    if len(personeller) == 0:
-        return None
+    if len(personeller) < 4: return None
     
-    matris = {p: {g: "" for g in gunler} for p in personeller}
+    # Boş tablo
+    df = pd.DataFrame(index=personeller, columns=gunler)
     
-    # Hafta içi izin atama (Herkes 1 gün izinli)
-    is_gunleri = gunler[:5]
-    for p in personeller:
-        izin_gunu = random.choice(is_gunleri)
-        matris[p][izin_gunu] = "İZİNLİ"
+    # Her gün için tam 1 kişi izinli atama
+    izin_sirasi = list(range(len(personeller)))
+    random.shuffle(izin_sirasi)
+    
+    for g_idx, gun in enumerate(gunler):
+        # Her gün için sırayla birine izin ver (7 gün olduğu için döngüsel)
+        izinli_kisi_idx = g_idx % len(personeller)
+        izinli_personel = personeller[izinli_kisi_idx]
         
-    # Vardiya saatlerini dağıt
-    for g in gunler:
-        aktifler = [p for p in personeller if matris[p][g] != "İZİNLİ"]
+        df.at[izinli_personel, gun] = "İZİNLİ"
+        
+        # Diğerlerine mesai ata
+        aktifler = [p for p in personeller if p != izinli_personel]
         random.shuffle(aktifler)
-        for idx, p in enumerate(aktifler):
-            # Saatleri döngüsel ata (05:30, 07:30 vb.)
-            saat = mesai_saatleri[idx % len(mesai_saatleri)]
-            matris[p][g] = f"{s_adi} ({saat})"
-            
-    return pd.DataFrame(matris).T
+        for m_idx, p in enumerate(aktifler):
+            saat = mesai_saatleri[m_idx % len(mesai_saatleri)]
+            df.at[p, gun] = f"{s_adi} ({saat})"
+    return df
 
-# --- ANA EKRAN ---
-if st.sidebar.button("🚀 Tüm Şubelerin Vardiyasını Oluştur"):
-    st.session_state['s1_df'] = vardiya_hesapla(s1_personel, s1_isim)
-    st.session_state['s2_df'] = vardiya_hesapla(s2_personel, s2_isim)
-    st.session_state['s3_df'] = vardiya_hesapla(s3_personel, s3_isim)
-    st.success("Tüm şubeler için vardiyalar başarıyla oluşturuldu!")
+# --- PDF OLUŞTURMA FONKSİYONU ---
+def create_pdf(df, title):
+    html_content = f"""
+    <html>
+    <head>
+        <style>
+            table {{ width: 100%; border-collapse: collapse; font-family: Arial; font-size: 10px; }}
+            th, td {{ border: 1px solid black; padding: 8px; text-align: center; }}
+            th {{ background-color: #f2f2f2; }}
+            .header {{ text-align: center; font-size: 18px; margin-bottom: 20px; }}
+        </style>
+    </head>
+    <body>
+        <div class="header">{title} Haftalık Vardiya Çizelgesi</div>
+        {df.to_html()}
+    </body>
+    </html>
+    """
+    return html_content
 
-# Tabloları Sekmelerde Göster
-if 's1_df' in st.session_state:
-    tabs = st.tabs([f"📍 {s1_isim}", f"📍 {s2_isim}", f"📍 {s3_isim}"])
+# --- ÇALIŞTIR ---
+if st.sidebar.button("🚀 Vardiyayı Taslak Olarak Oluştur"):
+    st.session_state['data_df'] = vardiya_olustur(s1_personel, s1_isim)
+
+if 'data_df' in st.session_state:
+    st.subheader("✍️ Tabloyu Düzenle (Hücreye çift tıklayarak değiştirebilirsiniz)")
     
-    with tabs[0]:
-        st.subheader(f"{s1_isim} Personel Bazlı Çizelge")
-        st.table(st.session_state['s1_df'])
-        
-    with tabs[1]:
-        st.subheader(f"{s2_isim} Personel Bazlı Çizelge")
-        st.table(st.session_state['s2_df'])
-        
-    with tabs[2]:
-        st.subheader(f"{s3_isim} Personel Bazlı Çizelge")
-        st.table(st.session_state['s3_df'])
-
-    # Excel İndirme
-    buffer = io.BytesIO()
-    with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
-        st.session_state['s1_df'].to_excel(writer, sheet_name=s1_isim[:30])
-        st.session_state['s2_df'].to_excel(writer, sheet_name=s2_isim[:30])
-        st.session_state['s3_df'].to_excel(writer, sheet_name=s3_isim[:30])
+    # Düzenlenebilir Tablo Ayarları
+    gb = GridOptionsBuilder.from_dataframe(st.session_state['data_df'].reset_index())
+    gb.configure_default_column(editable=True, sortable=True)
+    grid_options = gb.build()
     
-    st.sidebar.markdown("---")
-    st.sidebar.download_button(
-        label="📥 Tüm Şubeleri Excel İndir",
-        data=buffer.getvalue(),
-        file_name="sube_bazli_vardiya.xlsx",
-        mime="application/vnd.ms-excel"
+    response = AgGrid(
+        st.session_state['data_df'].reset_index(),
+        gridOptions=grid_options,
+        update_mode='MODEL_CHANGED',
+        data_return_mode='AS_INPUT',
+        theme='alpine',
     )
-else:
-    st.info("Lütfen yan menüden şube isimlerini ve personellerini girip 'Vardiya Oluştur' butonuna basın.")
+    
+    updated_df = response['data']
+    
+    # PDF İndirme Butonu
+    if st.button("📄 PDF Olarak İndir"):
+        html_string = create_pdf(updated_df, s1_isim)
+        # Not: PDF üretimi için lokalde weasyprint kurulu olmalıdır. 
+        # Alternatif olarak HTML indirme sunulabilir:
+        st.download_button(
+            label="HTML/PDF Taslağını İndir",
+            data=html_string,
+            file_name="vardiya.html",
+            mime="text/html"
+        )
+        st.success("PDF taslağı hazır! (Not: PDF'e dönüştürmek için bu dosyayı tarayıcıda açıp Yazdır -> PDF diyebilirsiniz)")
